@@ -200,7 +200,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
 
         const params = new URLSearchParams({
             mode: 'apply', reason: '1',
-            grade: userData.grade, class: userData.class, class_number: userData.number,
+            grade: userData.grade || '', class: userData.class || '', class_number: userData.number || '',
             date: date, time: time, place: place,
             detail: detail || '', detail_reason: detail_reason || ''
         });
@@ -210,7 +210,6 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             validateStatus: () => true 
         });
 
-        // 🟢 [안전 패치] response.data가 객체(JSON)일 경우 문자열로 강제 변환하여 .includes() 에러 방지
         const responseText = typeof response.data === 'string' 
             ? response.data 
             : JSON.stringify(response.data);
@@ -246,7 +245,7 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
 
         const params = new URLSearchParams({
             mode: 'apply',
-            grade: userData.grade, class: userData.class, class_number: userData.number,
+            grade: userData.grade || '', class: userData.class || '', class_number: userData.number || '',
             type: type, reason: reason, bdate: bdate, edate: edate
         });
 
@@ -255,7 +254,6 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             validateStatus: () => true
         });
 
-        // 🟢 [안전 패치] 외출 신청 쪽도 동일하게 데이터 타입 예외 방어
         const responseText = typeof response.data === 'string' 
             ? response.data 
             : JSON.stringify(response.data);
@@ -281,6 +279,65 @@ app.post('/api/disconnect', verifyApiKey, async (req, res) => {
         res.json({ success: true, message: '계정 연동이 안전하게 해제되었습니다.' });
     } catch (error) {
         res.status(500).json({ success: false, message: `연동 해제 중 에러: ${error.message}` });
+    }
+});
+
+// [API 5] 신청 내역(자율학습, 외출/외박) 조회
+app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
+    const { studentId, token } = req.body;
+    if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
+
+    try {
+        const sessionDoc = await db.collection('sessions').doc(token).get();
+        if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
+            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
+        }
+
+        const userDoc = await db.collection('users').doc(studentId).get();
+        if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
+        
+        const userData = userDoc.data();
+        const rawPassword = decrypt(userData.encryptedPw);
+        const client = await getAuthenticatedSession(studentId, rawPassword);
+
+        // 1. 자율학습 신청 내역 파싱
+        const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/apply.php`);
+        const $study = cheerio.load(studyRes.data);
+        const studyList = [];
+        $study('table tbody tr').each((i, el) => {
+            const tds = $study(el).find('td');
+            if (tds.length >= 5 && !$study(tds[0]).text().includes('없습니다')) {
+                studyList.push({
+                    date: $study(tds[0]).text().trim(),
+                    time: $study(tds[1]).text().trim(),
+                    place: $study(tds[2]).text().trim(),
+                    detail: $study(tds[3]).text().trim(),
+                    status: $study(tds).last().text().trim().replace(/\s+/g, ' ')
+                });
+            }
+        });
+
+        // 2. 외출/외박 신청 내역 파싱
+        const outRes = await client.get(`${SCHOOL_BASE_URL}/school_out/apply.php`);
+        const $out = cheerio.load(outRes.data);
+        const outList = [];
+        $out('table tbody tr').each((i, el) => {
+            const tds = $out(el).find('td');
+            if (tds.length >= 4 && !$out(tds[0]).text().includes('없습니다')) {
+                outList.push({
+                    type: $out(tds[0]).text().trim(),
+                    reason: $out(tds[1]).text().trim(),
+                    outDate: $out(tds[2]).text().trim(),
+                    inDate: $out(tds[3]).text().trim(),
+                    status: $out(tds).last().text().trim().replace(/\s+/g, ' ')
+                });
+            }
+        });
+
+        res.json({ success: true, studyList, outList });
+    } catch (error) {
+        console.error("내역 조회 에러:", error);
+        res.status(500).json({ success: false, message: `내역 조회 중 서버 에러: ${error.message}` });
     }
 });
 
