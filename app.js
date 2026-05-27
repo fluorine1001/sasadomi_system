@@ -1,7 +1,7 @@
 // Render 또는 Vercel에 배포한 본인의 API 주소로 연동
 const BACKEND_API_URL = 'https://sasadomi-system.vercel.app';
 
-// 🟢 [신규] 백엔드와 맞춘 API Key (Firebase Firestore의 api_keys 컬렉션에 등록한 문서 ID와 똑같이 적어줘!)
+// 백엔드와 맞춘 API Key (Firebase Firestore의 api_keys 컬렉션에 등록한 문서 ID와 똑같이 적어줘!)
 const SASADOMI_API_KEY = '1MANmgyI4BbFbN2vq95K'; 
 
 let currentStudentId = '';
@@ -11,12 +11,14 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedToken = localStorage.getItem('sasa_sessionToken');
     
     if (savedToken) {
-        document.getElementById('rememberMe').checked = true;
+        if (document.getElementById('rememberMe')) {
+            document.getElementById('rememberMe').checked = true;
+        }
         autoLogin(savedToken);
     }
 });
 
-// 🟢 [수정] 토큰을 이용한 자동 로그인
+// 토큰을 이용한 자동 로그인
 async function autoLogin(token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/auto-login`, {
@@ -33,8 +35,8 @@ async function autoLogin(token) {
         if (data.success) {
             currentStudentId = data.studentId;
             
-            // 🟢 자동 로그인 성공 시 로그인 폼 영역을 확실하게 숨김
-            const loginForm = document.getElementById('loginForm'); // 👈 본인의 HTML 로그인 감싸는 tag ID에 맞게 수정 가능
+            // 자동 로그인 성공 시 로그인 폼 영역을 확실하게 숨김
+            const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
             renderDashboard(data);
@@ -46,7 +48,7 @@ async function autoLogin(token) {
     }
 }
 
-// 🟢 [수정] 계정 연동 및 데이터 패치 (최초 로그인)
+// 계정 연동 및 데이터 패치 (최초 로그인)
 async function syncAccount() {
     const studentId = document.getElementById('studentId').value;
     const studentPw = document.getElementById('studentPw').value;
@@ -77,7 +79,7 @@ async function syncAccount() {
                 clearSession();
             }
 
-            // 🟢 최초 로그인 성공 시에도 로그인 폼 영역을 확실하게 숨김
+            // 최초 로그인 성공 시에도 로그인 폼 영역을 확실하게 숨김
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
@@ -92,7 +94,7 @@ async function syncAccount() {
     }
 }
 
-// 🟢 [수정] 📌 대시보드 UI 렌더링 분리
+// 📌 대시보드 UI 렌더링 분리
 function renderDashboard(data) {
     document.getElementById('rewardView').innerText = data.totalReward;
     document.getElementById('penaltyView').innerText = data.totalPenalty;
@@ -114,7 +116,7 @@ function renderDashboard(data) {
         </tr>`;
     });
 
-    // 🟢 대시보드 켜기
+    // 대시보드 켜기
     document.getElementById('dashboard').style.display = 'block';
 }
 
@@ -123,7 +125,7 @@ function clearSession() {
     localStorage.removeItem('sasa_sessionToken');
 }
 
-// [기능] 자율학습 장소 변경 이벤트 핸들러
+// 자율학습 장소 변경 이벤트 핸들러
 function toggleStudyFields(placeValue) {
     const conditionalBox = document.getElementById('conditionalStudyFields');
     if (placeValue === '3') {
@@ -133,7 +135,7 @@ function toggleStudyFields(placeValue) {
     }
 }
 
-// [기능] 자율학습 신청 제출
+// 자율학습 신청 제출 (token 실어보내도록 수정)
 async function submitStudy() {
     const rawDate = document.getElementById('studyDate').value;
     const time = document.getElementById('studyTime').value;
@@ -144,8 +146,12 @@ async function submitStudy() {
     const dateObj = new Date(rawDate + 'T00:00:00');
     const timestampSeconds = Math.floor(dateObj.getTime() / 1000);
 
+    // 🟢 로컬 스토리지에서 세션 토큰 가져오기
+    const savedToken = localStorage.getItem('sasa_sessionToken');
+
     const payload = {
         studentId: currentStudentId,
+        token: savedToken, // 🟢 백엔드로 토큰 전송
         date: timestampSeconds,
         time: time,
         place: place
@@ -180,7 +186,7 @@ async function submitStudy() {
     }
 }
 
-// [기능] 외출 외박 신청 제출
+// 외출 외박 신청 제출 (token 실어보내도록 수정)
 async function submitOut() {
     const outType = document.getElementById('outType').value;
     const outReason = document.getElementById('outReason').value;
@@ -194,6 +200,9 @@ async function submitOut() {
     const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
     const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
 
+    // 🟢 로컬 스토리지에서 세션 토큰 가져오기
+    const savedToken = localStorage.getItem('sasa_sessionToken');
+
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/apply-out`, {
             method: 'POST',
@@ -203,6 +212,7 @@ async function submitOut() {
             },
             body: JSON.stringify({
                 studentId: currentStudentId,
+                token: savedToken, // 🟢 백엔드로 토큰 전송
                 type: outType,
                 reason: outReason,
                 bdate: bdateSec,
@@ -223,7 +233,7 @@ async function submitOut() {
     }
 }
 
-// 🟢 [수정] 📌 [기능] 계정 연동 해제
+// 계정 연동 해제
 async function disconnectAccount() {
     if (!currentStudentId) return alert('현재 연동된 계정이 없습니다.');
     
@@ -250,7 +260,6 @@ async function disconnectAccount() {
             currentStudentId = '';
             document.getElementById('dashboard').style.display = 'none';
             
-            // 🟢 연동 해제 시 로그인 폼 영역을 다시 보이게 함
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'block';
 
