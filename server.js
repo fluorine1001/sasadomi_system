@@ -96,14 +96,15 @@ async function getAuthenticatedSession(studentId, rawPassword) {
 function parseTable(html) {
     const $ = cheerio.load(html);
     const list = [];
-    $('table.table-hover tbody tr').each((index, element) => {
+    // 상벌점 테이블 파싱 안정성을 위해 tbody 선택자 제거 가능성 열어둠
+    $('table.table-hover tr').each((index, element) => {
         const tds = $(element).find('td');
         if (tds.length >= 4) {
             list.push({
-                score: $(tds[0]).text().trim(),
-                weight: $(tds[1]).text().trim(),
-                reason: $(tds[2]).clone().children().remove().end().text().trim(),
-                date: $(tds[3]).text().trim()
+                score: tds.eq(0).text().trim(),
+                weight: tds.eq(1).text().trim(),
+                reason: tds.eq(2).clone().children().remove().end().text().trim(),
+                date: tds.eq(3).text().trim()
             });
         }
     });
@@ -304,15 +305,17 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/apply.php`);
         const $study = cheerio.load(studyRes.data);
         const studyList = [];
-        $study('table tbody tr').each((i, el) => {
+        
+        // 브라우저 보정 버그를 유발하는 tbody 제거 및 데이터 안전 정제 적용
+        $study('table tr').each((i, el) => {
             const tds = $study(el).find('td');
-            if (tds.length >= 5 && !$study(tds[0]).text().includes('없습니다')) {
+            if (tds.length > 0 && !tds.eq(0).text().includes('없습니다')) {
                 studyList.push({
-                    date: $study(tds[0]).text().trim(),
-                    time: $study(tds[1]).text().trim(),
-                    place: $study(tds[2]).text().trim(),
-                    detail: $study(tds[3]).text().trim(),
-                    status: $study(tds).last().text().trim().replace(/\s+/g, ' ')
+                    date: tds.eq(0).text().trim(),
+                    time: tds.eq(1).text().trim(),
+                    place: tds.eq(2).text().trim(),
+                    detail: tds.eq(3).text().trim(),
+                    status: tds.last().text().trim().replace(/\s+/g, ' ')
                 });
             }
         });
@@ -321,15 +324,17 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         const outRes = await client.get(`${SCHOOL_BASE_URL}/school_out/apply.php`);
         const $out = cheerio.load(outRes.data);
         const outList = [];
-        $out('table tbody tr').each((i, el) => {
+        
+        // 동일하게 tbody 제거 및 안전 정제 적용
+        $out('table tr').each((i, el) => {
             const tds = $out(el).find('td');
-            if (tds.length >= 4 && !$out(tds[0]).text().includes('없습니다')) {
+            if (tds.length > 0 && !tds.eq(0).text().includes('없습니다')) {
                 outList.push({
-                    type: $out(tds[0]).text().trim(),
-                    reason: $out(tds[1]).text().trim(),
-                    outDate: $out(tds[2]).text().trim(),
-                    inDate: $out(tds[3]).text().trim(),
-                    status: $out(tds).last().text().trim().replace(/\s+/g, ' ')
+                    type: tds.eq(0).text().trim(),
+                    reason: tds.eq(1).text().trim(),
+                    outDate: tds.eq(2).text().trim(),
+                    inDate: tds.eq(3).text().trim(),
+                    status: tds.last().text().trim().replace(/\s+/g, ' ')
                 });
             }
         });
