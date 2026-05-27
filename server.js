@@ -144,7 +144,7 @@ app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
         const totalReward = rewardText.replace(/[^0-9]/g, '') || '0';
         const rewardList = parseTable(rewardResponse.data);
 
-        // 🟢 2. 벌점 페이지(tab=2) 분리 크롤링
+        // 🟢 2. 벌점 페이지(tab=2) 완전히 분리하여 크롤링 (오류 수정)
         const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
         const $penalty = cheerio.load(penaltyResponse.data);
         
@@ -194,7 +194,7 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
         const totalReward = rewardText.replace(/[^0-9]/g, '') || '0';
         const rewardList = parseTable(rewardResponse.data);
 
-        // 🟢 2. 벌점 페이지(tab=2) 분리 크롤링
+        // 🟢 2. 벌점 페이지(tab=2) 완전히 분리하여 크롤링 (오류 수정)
         const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
         const $penalty = cheerio.load(penaltyResponse.data);
         let penaltyText = $penalty('#punishmentTab p').eq(1).text() || '0';
@@ -219,12 +219,11 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
 app.post('/api/apply-study', verifyApiKey, async (req, res) => {
     const { studentId, token, date, time, place, detail, detail_reason } = req.body;
 
-    // 🟢 [보안 패치] 토큰 필수 검증 로직
+    // 🟢 토큰 검증 미들웨어 구현 (보안 강화)
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
 
     try {
         const sessionDoc = await db.collection('sessions').doc(token).get();
-        // 토큰이 존재하지 않거나, 토큰의 주인이 요청한 학번과 다를 경우 차단 (권한 우회 방어)
         if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
             return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
         }
@@ -243,7 +242,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             grade: userData.grade,
             class: userData.class,
             class_number: userData.number,
-            date: date, // 🟢 타임스탬프 형식 유지
+            date: date, // 초 단위 타임스탬프 스펙 유지
             time: time,
             place: place,
             detail: detail || '',
@@ -254,7 +253,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
-        // 🟢 [논리 패치] 학교 서버 응답 내 에러 스크립트 존재 여부 검사
+        // 🟢 학교 서버 응답 내 예외 발생 여부 확인 (논리 오류 제어)
         if (response.data.includes('history.back') || response.data.includes('alert(') || response.data.includes('실패')) {
             return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다. (이미 신청됨 또는 양식 오류)' });
         }
@@ -270,7 +269,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
 app.post('/api/apply-out', verifyApiKey, async (req, res) => {
     const { studentId, token, type, reason, bdate, edate } = req.body;
 
-    // 🟢 [보안 패치] 토큰 필수 검증 로직
+    // 🟢 토큰 검증 미들웨어 구현 (보안 강화)
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
 
     try {
@@ -294,7 +293,7 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             class_number: userData.number,
             type: type,
             reason: reason,
-            bdate: bdate, // 🟢 타임스탬프 형식 유지
+            bdate: bdate, // 초 단위 타임스탬프 스펙 유지
             edate: edate
         });
 
@@ -302,7 +301,7 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
-        // 🟢 [논리 패치] 학교 서버 응답 검사
+        // 🟢 학교 서버 응답 내 예외 발생 여부 확인 (논리 오류 제어)
         if (response.data.includes('history.back') || response.data.includes('alert(') || response.data.includes('실패')) {
             return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다.' });
         }
