@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const { wrapper } = require('axios-cookiejar-support');
+// 🛠️ 수정됨: 상단에서 require('axios-cookiejar-support') 제거 (ESM 크래시 방지)
 const { CookieJar } = require('tough-cookie');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -51,6 +51,10 @@ const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 
 // 공통 함수: 학교 세션 로그인 후 Axios 인스턴스 반환
 async function getAuthenticatedSession(studentId, rawPassword) {
+    // 🛠️ 수정됨: ESM 패키지인 axios-cookiejar-support를 비동기(Dynamic import)로 안전하게 호출
+    const { wrapper } = await import('axios-cookiejar-support');
+    
+    // 요청이 올 때마다 각 유저만의 독립된 쿠키 바구니(Jar)와 클라이언트를 생성하여 쿠키 꼬임 방지
     const jar = new CookieJar();
     const client = wrapper(axios.create({ jar, withCredentials: true }));
 
@@ -100,7 +104,7 @@ app.post('/api/login-and-fetch', async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        // 💡 추가됨: 고유 세션 토큰 생성 및 DB 저장
+        // 고유 세션 토큰 생성 및 DB 저장
         const sessionToken = crypto.randomUUID();
         await db.collection('sessions').doc(sessionToken).set({
             studentId: studentId,
@@ -122,7 +126,7 @@ app.post('/api/login-and-fetch', async (req, res) => {
 
         res.json({ 
             success: true, 
-            sessionToken, // 프론트로 토큰 전달
+            sessionToken, 
             totalReward, 
             totalPenalty, 
             rewardList, 
