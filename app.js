@@ -315,7 +315,7 @@ function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 
-// 📌 신청 내역 API 통신 로직 (Vercel 백엔드 파이프라인 유지)
+// 📌 신청 내역 API 통신 로직
 async function fetchApplications(studentId, token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/fetch-applications`, {
@@ -330,7 +330,6 @@ async function fetchApplications(studentId, token) {
         const data = await res.json();
         
         if (data.success) {
-            // 🟢 백엔드에서 데이터 가공 시 분석한 고유 ID(value)가 item.id로 들어있어야 삭제 연동이 가능합니다.
             renderStudyList(data.studyList);
             renderOutList(data.outList);
         } else {
@@ -341,7 +340,7 @@ async function fetchApplications(studentId, token) {
     }
 }
 
-// 📌 자율학습 리스트 렌더링 (분석한 데이터 기반 삭제 버튼 기능 이식)
+// 📌 자율학습 리스트 렌더링
 function renderStudyList(list) {
     const tbody = document.querySelector('#studyHistoryTable tbody');
     tbody.innerHTML = '';
@@ -367,7 +366,7 @@ function renderStudyList(list) {
     });
 }
 
-// 📌 외출/외박 리스트 렌더링 (분석한 데이터 기반 삭제 버튼 기능 이식)
+// 📌 외출/외박 리스트 렌더링
 function renderOutList(list) {
     const tbody = document.querySelector('#outHistoryTable tbody');
     tbody.innerHTML = '';
@@ -393,10 +392,10 @@ function renderOutList(list) {
     });
 }
 
-// 📌 [신규 추가] 분석된 삭제 프로토콜 전송 함수 (Vercel 백엔드 경유형)
+// 📌 [삭제 프로토콜 전송 함수] 원본 취소 연동 완전 구현
 async function deleteApplication(type, id) {
     if (!id || id === 'undefined' || id === '') {
-        alert("삭제 처리를 위한 고유 식별자(ID)를 찾을 수 없습니다.");
+        alert("삭제 처리를 위한 기숙사 고유 식별자(ID)가 제공되지 않았습니다.\n이미 관리자가 승인했거나 비정상적인 접근입니다.");
         return;
     }
     
@@ -405,7 +404,6 @@ async function deleteApplication(type, id) {
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     try {
-        // Vercel 백엔드 API 서버에 삭제 대행 요청 위임
         const res = await fetch(`${BACKEND_API_URL}/api/delete-application`, {
             method: 'POST',
             headers: {
@@ -415,21 +413,21 @@ async function deleteApplication(type, id) {
             body: JSON.stringify({
                 studentId: currentStudentId,
                 token: activeToken,
-                type: type,        // 'study' 또는 'out' 전달
-                del_items: id      // 학교 사이트 삭제 바디 규격명 매칭용 데이터
+                type: type,        // 'study' 또는 'out' 분기 신호
+                del_items: id      // 원본 서버의 바디 규격명 매칭 데이터 전달
             })
         });
 
         const data = await res.json();
         if (data.success) {
-            alert('신청 항목이 정상적으로 삭제되었습니다.');
-            // 취소 반영 후 목록 리로드
+            alert('신청 항목이 성공적으로 삭제/취소 처리되었습니다.');
+            // 목록 새로고침
             fetchApplications(currentStudentId, activeToken);
         } else {
-            alert(data.message || '삭제에 실패했습니다.');
+            alert(data.message || '삭제 실패');
         }
     } catch (error) {
         console.error("삭제 요청 통신 에러:", error);
-        alert("서버와 통신하는 중 에러가 발생했습니다.");
+        alert("서버와 통신하는 중 오류가 발생했습니다.");
     }
 }
