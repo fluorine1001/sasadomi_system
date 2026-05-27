@@ -72,7 +72,6 @@ function parseTable(html) {
     const list = [];
     $('table.table-hover tbody tr').each((index, element) => {
         const tds = $(element).find('td');
-        // '내역이 없습니다' 같은 빈 셀 방지 (td가 4개 이상인 정상 데이터만 파싱)
         if (tds.length >= 4) {
             list.push({
                 score: $(tds[0]).text().trim(),
@@ -90,10 +89,8 @@ app.post('/api/login-and-fetch', async (req, res) => {
     const { studentId, studentPw, grade, sclass, number } = req.body;
 
     try {
-        // 1. 학교 사이트 로그인 검증 시도
         const client = await getAuthenticatedSession(studentId, studentPw);
 
-        // 2. 검증 성공 시 Firebase Firestore에 암호화하여 사용자 정보 저장/업데이트
         const encryptedPw = encrypt(studentPw);
         await db.collection('users').doc(studentId).set({
             studentId,
@@ -104,26 +101,19 @@ app.post('/api/login-and-fetch', async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        // 3. 상점 탭 (tab=1) 데이터 가져오기
         const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
         const $reward = cheerio.load(rewardResponse.data);
         
-        // 총점 파싱 (상점 탭에서 추출)
         let rewardText = $reward('#rewordTab p').eq(1).text() || '0';
         let penaltyText = $reward('#punishmentTab p').eq(1).text() || '0';
         const totalReward = rewardText.replace(/[^0-9]/g, '');
         const totalPenalty = penaltyText.replace(/[^0-9]/g, '');
 
-        // 상점 내역 리스트 추출
         const rewardList = parseTable(rewardResponse.data);
 
-        // 4. 벌점 탭 (tab=2) 데이터 가져오기
         const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
-        
-        // 벌점 내역 리스트 추출
         const penaltyList = parseTable(penaltyResponse.data);
 
-        // 5. 총점과 분리된 두 리스트를 프론트엔드로 전달
         res.json({ 
             success: true, 
             totalReward, 
@@ -206,6 +196,33 @@ app.post('/api/apply-out', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: '외출/외박 신청 중 오류 발생' });
+    }
+});
+
+// 📌 [API 4] 계정 연동 해제 (Firestore에서 학생 정보 완전 삭제)
+app.post('/api/disconnect', async (req, res) => {
+    const { studentId } = req.body;
+
+    if (!studentId) {
+        return res.status(400).json({ success: false, message: '학번이 필요합니다.' });
+    }
+
+    try {
+        const userRef = db.collection('users').doc(studentId);
+        const doc = await userRef.get();
+
+        // 등록된 정보가 없는 경우 예외 처리
+        if (!doc.exists) {
+            return res.status(404).json({ success: false, message: '연동된 계정 정보가 존재하지 않습니다.' });
+        }
+
+        // DB에서 문서 삭제
+        await userRef.delete();
+
+        res.json({ success: true, message: '계정 연동이 안전하게 해제되었습니다.' });
+    } catch (error) {
+        console.error('연동 해제 오류:', error);
+        res.status(500).json({ success: false, message: '연동 해제 중 서버 오류가 발생했습니다.' });
     }
 });
 
