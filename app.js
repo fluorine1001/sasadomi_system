@@ -1,5 +1,5 @@
 // Render에 배포한 본인의 API 주소로 연동
-const BACKEND_API_URL = 'https://dormitory-backend-xxxx.onrender.com';
+const BACKEND_API_URL = 'https://sasadomi-api.onrender.com';
 
 let currentStudentId = '';
 
