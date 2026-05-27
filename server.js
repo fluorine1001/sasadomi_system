@@ -48,7 +48,7 @@ function decrypt(text) {
 }
 
 // 🏫 학교 사이트 베이스 주소 정의 (실제 도메인으로 변경하여 사용)
-const SCHOOL_BASE_URL = 'https://your-school-dormitory.kr';
+const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 
 // 공통 함수: 학교 세션 로그인 후 Axios 인스턴스 반환
 async function getAuthenticatedSession(studentId, rawPassword) {
@@ -87,7 +87,7 @@ app.post('/api/login-and-fetch', async (req, res) => {
         }, { merge: true });
 
         // 3. 마이페이지 화면 데이터 가져오기 (실제 벌점조회 주소 입력)
-        const response = await client.get(`${SCHOOL_BASE_URL}/mypage.php`); 
+        const response = await client.get(`${SCHOOL_BASE_URL}/point/list.php`); 
         const $ = cheerio.load(response.data);
 
         // 총점 파싱
