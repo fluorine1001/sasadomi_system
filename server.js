@@ -10,7 +10,7 @@ import 'dotenv/config';
 
 const app = express();
 
-// 🟢 [변경] 모든 도메인 및 외부 클라이언트에서 이 API를 호출할 수 있도록 CORS 전면 개방
+// 모든 도메인 및 외부 클라이언트에서 이 API를 호출할 수 있도록 CORS 전면 개방
 app.use(cors({
     origin: '*',
     methods: ['POST', 'GET', 'OPTIONS'],
@@ -30,9 +30,8 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-// 🟢 [신규] 외부 개발자 인증을 위한 API Key 검증 미들웨어
+// 외부 개발자 인증을 위한 API Key 검증 미들웨어
 const verifyApiKey = async (req, res, next) => {
-    // OPTIONS(CORS 예비 요청)는 인증을 건너뜁니다.
     if (req.method === 'OPTIONS') return next();
 
     const apiKey = req.headers['x-api-key'];
@@ -42,12 +41,11 @@ const verifyApiKey = async (req, res, next) => {
     }
 
     try {
-        // Firebase의 api_keys 컬렉션에서 해당 키가 존재하는지 확인
         const keyDoc = await db.collection('api_keys').doc(apiKey).get();
         if (!keyDoc.exists) {
             return res.status(403).json({ success: false, message: '등록되지 않았거나 유효하지 않은 API Key입니다.' });
         }
-        next(); // 인증 통과 시 다음 로직 실행
+        next();
     } catch (error) {
         console.error('API Key 검증 오류:', error);
         return res.status(500).json({ success: false, message: '인증 서버 오류' });
@@ -77,7 +75,7 @@ function decrypt(text) {
     let encryptedText = Buffer.from(textParts.join(':'), 'hex');
     let decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
     let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    rounded = Buffer.concat([decrypted, decipher.final()]);
     return decrypted.toString();
 }
 
@@ -114,8 +112,6 @@ function parseTable(html) {
     });
     return list;
 }
-
-// 🟢 아래 핵심 기능들에는 모두 verifyApiKey 미들웨어를 장착하여 보호합니다.
 
 // [API 1] 로그인 정보 저장 및 상벌점 총점/내역 스크래핑
 app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
@@ -213,9 +209,9 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API 2] 자율학습 신청 대행
+// [API 2] 자율학습 신청 대행 (개별 세션 격리 적용)
 app.post('/api/apply-study', verifyApiKey, async (req, res) => {
-    const { studentId, date, time, place, detail, detail_reason } = req.body;
+    const { studentId, token, date, time, place, detail, detail_reason } = req.body;
 
     try {
         const userDoc = await db.collection('users').doc(studentId).get();
@@ -224,6 +220,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
         const userData = userDoc.data();
         const rawPassword = decrypt(userData.encryptedPw);
 
+        // 🟢 로그인 세션 쿠키가 탑재된 독립 client 인스턴스 생성
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
         const params = new URLSearchParams({
@@ -239,6 +236,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             detail_reason: detail_reason || ''
         });
 
+        // 🟢 전역 axios가 아닌 독립 client 객체로 요청을 전달하여 쿠키 격리
         await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
@@ -250,9 +248,9 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API 3] 외출/외박 신청 대행
+// [API 3] 외출/외박 신청 대행 (개별 세션 격리 적용)
 app.post('/api/apply-out', verifyApiKey, async (req, res) => {
-    const { studentId, type, reason, bdate, edate } = req.body;
+    const { studentId, token, type, reason, bdate, edate } = req.body;
 
     try {
         const userDoc = await db.collection('users').doc(studentId).get();
@@ -261,6 +259,7 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
         const userData = userDoc.data();
         const rawPassword = decrypt(userData.encryptedPw);
 
+        // 🟢 로그인 세션 쿠키가 탑재된 독립 client 인스턴스 생성
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
         const params = new URLSearchParams({
@@ -274,6 +273,7 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             edate: edate
         });
 
+        // 🟢 전역 axios가 아닌 독립 client 객체로 요청을 전달하여 쿠키 격리
         await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
