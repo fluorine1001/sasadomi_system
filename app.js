@@ -3,7 +3,40 @@ const BACKEND_API_URL = 'https://sasadomi-api.onrender.com';
 
 let currentStudentId = '';
 
-// [기능] 계정 연동 및 데이터 패치
+// 📌 페이지 로드 시 토큰 기반 자동 로그인 시도
+window.addEventListener('DOMContentLoaded', () => {
+    const savedToken = localStorage.getItem('sasa_sessionToken');
+    
+    if (savedToken) {
+        document.getElementById('rememberMe').checked = true;
+        autoLogin(savedToken);
+    }
+});
+
+// [기능] 토큰을 이용한 자동 로그인
+async function autoLogin(token) {
+    try {
+        const res = await fetch(`${BACKEND_API_URL}/api/auto-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+
+        const data = await res.json();
+        
+        if (data.success) {
+            currentStudentId = data.studentId;
+            renderDashboard(data);
+        } else {
+            // 토큰이 만료되었거나 유효하지 않으면 로컬 데이터 정리
+            clearSession();
+        }
+    } catch (error) {
+        console.error('자동 로그인 실패:', error);
+    }
+}
+
+// [기능] 계정 연동 및 데이터 패치 (최초 로그인)
 async function syncAccount() {
     const studentId = document.getElementById('studentId').value;
     const studentPw = document.getElementById('studentPw').value;
@@ -24,30 +57,15 @@ async function syncAccount() {
         
         if (data.success) {
             currentStudentId = studentId;
-            document.getElementById('rewardView').innerText = data.totalReward;
-            document.getElementById('penaltyView').innerText = data.totalPenalty;
 
-            // 💡 수정됨: 상점과 벌점을 각각 구분할 수 있도록 태그(type)를 맵핑한 후 합칩니다.
-            const rewards = (data.rewardList || []).map(item => ({ ...item, type: '상점', color: '#1890ff' }));
-            const penalties = (data.penaltyList || []).map(item => ({ ...item, type: '벌점', color: '#ff4d4f' }));
-            const combinedList = [...rewards, ...penalties];
+            // 💡 실무 보안: 비밀번호 대신 백엔드에서 발급한 '세션 토큰'만 저장
+            if (document.getElementById('rememberMe') && document.getElementById('rememberMe').checked) {
+                localStorage.setItem('sasa_sessionToken', data.sessionToken);
+            } else {
+                clearSession();
+            }
 
-            // 테이블 리스트 렌더링
-            const tbody = document.querySelector('#historyTable tbody');
-            tbody.innerHTML = '';
-            
-            combinedList.forEach(item => {
-                // 💡 수정됨: '구분' 칸이 추가되었고 상/벌점에 따라 색상이 다르게 적용됩니다.
-                tbody.innerHTML += `<tr>
-                    <td style="color: ${item.color}; font-weight: bold;">${item.type}</td>
-                    <td>${item.score}</td>
-                    <td>${item.weight}</td>
-                    <td>${item.reason}</td>
-                    <td>${item.date}</td>
-                </tr>`;
-            });
-
-            document.getElementById('dashboard').style.display = 'block';
+            renderDashboard(data);
             alert('성공적으로 계정이 연동 및 최신 데이터 동기화 완료되었습니다.');
         } else {
             alert(data.message || '인증 실패');
@@ -56,6 +74,36 @@ async function syncAccount() {
         console.error(error);
         alert('서버 통신 중 오류가 발생했습니다.');
     }
+}
+
+// 📌 대시보드 UI 렌더링 분리 (재사용성을 위해)
+function renderDashboard(data) {
+    document.getElementById('rewardView').innerText = data.totalReward;
+    document.getElementById('penaltyView').innerText = data.totalPenalty;
+
+    const rewards = (data.rewardList || []).map(item => ({ ...item, type: '상점', color: '#1890ff' }));
+    const penalties = (data.penaltyList || []).map(item => ({ ...item, type: '벌점', color: '#ff4d4f' }));
+    const combinedList = [...rewards, ...penalties];
+
+    const tbody = document.querySelector('#historyTable tbody');
+    tbody.innerHTML = '';
+    
+    combinedList.forEach(item => {
+        tbody.innerHTML += `<tr>
+            <td style="color: ${item.color}; font-weight: bold;">${item.type}</td>
+            <td>${item.score}</td>
+            <td>${item.weight}</td>
+            <td>${item.reason}</td>
+            <td>${item.date}</td>
+        </tr>`;
+    });
+
+    document.getElementById('dashboard').style.display = 'block';
+}
+
+// 📌 세션 초기화 유틸리티
+function clearSession() {
+    localStorage.removeItem('sasa_sessionToken');
 }
 
 // [기능] 자율학습 장소 변경 이벤트 핸들러 (본관 전용 조건부 필드 제어)
@@ -156,13 +204,15 @@ async function submitOut() {
 async function disconnectAccount() {
     if (!currentStudentId) return alert('현재 연동된 계정이 없습니다.');
     
-    if (!confirm('정말 계정 연동을 해제하시겠습니까?\n저장된 비밀번호와 자동 로그인 정보가 즉시 삭제됩니다.')) return;
+    if (!confirm('정말 계정 연동을 해제하시겠습니까?\n저장된 자동 로그인 정보가 즉시 삭제됩니다.')) return;
+
+    const savedToken = localStorage.getItem('sasa_sessionToken');
 
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ studentId: currentStudentId })
+            body: JSON.stringify({ studentId: currentStudentId, token: savedToken })
         });
 
         const data = await res.json();
@@ -170,7 +220,8 @@ async function disconnectAccount() {
         if (data.success) {
             alert('계정 연동이 안전하게 해제되었습니다.');
             
-            // 💡 수정됨: 연동 해제 즉시 UI를 완벽하게 숨기고 내부 잔여 데이터를 전부 지웁니다.
+            // 데이터 및 UI 초기화
+            clearSession();
             currentStudentId = '';
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('studentId').value = '';
@@ -178,13 +229,12 @@ async function disconnectAccount() {
             document.getElementById('grade').value = '';
             document.getElementById('sclass').value = '';
             document.getElementById('number').value = '';
+            if (document.getElementById('rememberMe')) document.getElementById('rememberMe').checked = false;
             
-            // 데이터 텍스트 및 테이블 초기화 (보안 강화)
             document.getElementById('rewardView').innerText = '0';
             document.getElementById('penaltyView').innerText = '0';
             document.querySelector('#historyTable tbody').innerHTML = '';
             
-            // 혹시 열려있을지 모를 모달도 닫기
             closeModal('studyModal');
             closeModal('outModal');
         } else {
