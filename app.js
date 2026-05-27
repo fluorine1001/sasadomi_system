@@ -5,6 +5,7 @@ const BACKEND_API_URL = 'https://sasadomi-system.vercel.app';
 const SASADOMI_API_KEY = '1MANmgyI4BbFbN2vq95K'; 
 
 let currentStudentId = '';
+let currentSessionToken = ''; // 🟢 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수 추가
 
 // 📌 페이지 로드 시 토큰 기반 자동 로그인 시도
 window.addEventListener('DOMContentLoaded', () => {
@@ -34,6 +35,7 @@ async function autoLogin(token) {
         
         if (data.success) {
             currentStudentId = data.studentId;
+            currentSessionToken = token; // 🟢 자동 로그인 성공 시 토큰을 전역 변수에 저장
             
             // 자동 로그인 성공 시 로그인 폼 영역을 확실하게 숨김
             const loginForm = document.getElementById('loginForm');
@@ -72,6 +74,7 @@ async function syncAccount() {
         
         if (data.success) {
             currentStudentId = studentId;
+            currentSessionToken = data.sessionToken; // 🟢 체크박스 여부와 관계없이 토큰은 무조건 전역 변수에 확보!
 
             if (document.getElementById('rememberMe') && document.getElementById('rememberMe').checked) {
                 localStorage.setItem('sasa_sessionToken', data.sessionToken);
@@ -146,12 +149,12 @@ async function submitStudy() {
     const dateObj = new Date(rawDate + 'T00:00:00');
     const timestampSeconds = Math.floor(dateObj.getTime() / 1000);
 
-    // 로컬 스토리지에서 세션 토큰 가져오기
-    const savedToken = localStorage.getItem('sasa_sessionToken');
+    // 🟢 로컬 스토리지에 토큰이 없더라도 전역 변수(메모리)에 보관된 토큰을 가져옴
+    const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     const payload = {
         studentId: currentStudentId,
-        token: savedToken, 
+        token: activeToken, // 🟢 안전하게 확보한 토큰 전송
         date: timestampSeconds,
         time: time,
         place: place
@@ -200,8 +203,8 @@ async function submitOut() {
     const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
     const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
 
-    // 로컬 스토리지에서 세션 토큰 가져오기
-    const savedToken = localStorage.getItem('sasa_sessionToken');
+    // 🟢 로컬 스토리지에 토큰이 없더라도 전역 변수(메모리)에 보관된 토큰을 가져옴
+    const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/apply-out`, {
@@ -212,7 +215,7 @@ async function submitOut() {
             },
             body: JSON.stringify({
                 studentId: currentStudentId,
-                token: savedToken, 
+                token: activeToken, // 🟢 안전하게 확보한 토큰 전송
                 type: outType,
                 reason: outReason,
                 bdate: bdateSec,
@@ -258,6 +261,7 @@ async function disconnectAccount() {
             
             clearSession();
             currentStudentId = '';
+            currentSessionToken = ''; // 🟢 연동 해제 시 메모리 토큰도 완전 초기화
             document.getElementById('dashboard').style.display = 'none';
             
             const loginForm = document.getElementById('loginForm');
