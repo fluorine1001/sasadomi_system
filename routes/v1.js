@@ -4,13 +4,11 @@ import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import NodeCache from 'node-cache'; // 🟢 캐시 라이브러리 추가
+import NodeCache from 'node-cache';
 
 const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 const ENCRYPTION_KEY = process.env.SECRET_KEY || 'a'.repeat(32); 
 const IV_LENGTH = 16;
-
-// 🟢 캐시 메모리 저장소 생성 (데이터 보관 시간: 3분 = 180초)
 const myCache = new NodeCache({ stdTTL: 180, checkperiod: 120 });
 
 function encrypt(text) {
@@ -61,11 +59,31 @@ function parseTable(html) {
     return list;
 }
 
-// 🟢 라우터 생성 함수 (DB 객체를 메인에서 받아옴)
-export default function v1Router(db) {
+export default function v1Router(db, admin) {
     const router = express.Router();
 
-    // 1. 로그인 (POST /v1/auth/login)
+    /**
+     * @swagger
+     * /v1/auth/login:
+     * post:
+     * summary: 학교 계정으로 로그인 및 연동
+     * tags: [Auth]
+     * requestBody:
+     * required: true
+     * content:
+     * application/json:
+     * schema:
+     * type: object
+     * properties:
+     * studentId: { type: string, example: "s2024010101" }
+     * studentPw: { type: string, example: "mypassword!" }
+     * grade: { type: string, example: "1" }
+     * sclass: { type: string, example: "1" }
+     * number: { type: string, example: "01" }
+     * responses:
+     * 200:
+     * description: 로그인 성공 및 상벌점 내역 반환
+     */
     router.post('/auth/login', async (req, res) => {
         const { studentId, studentPw, grade, sclass, number } = req.body;
         try {
@@ -87,14 +105,28 @@ export default function v1Router(db) {
             const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
             const totalPenalty = (cheerio.load(penaltyResponse.data)('#punishmentTab p').eq(1).text() || '0').replace(/[^0-9]/g, '') || '0';
 
-            res.json({ 
-                success: true, sessionToken, totalReward, totalPenalty, 
-                rewardList: parseTable(rewardResponse.data), penaltyList: parseTable(penaltyResponse.data) 
-            });
+            res.json({ success: true, sessionToken, totalReward, totalPenalty, rewardList: parseTable(rewardResponse.data), penaltyList: parseTable(penaltyResponse.data) });
         } catch (error) { res.status(500).json({ success: false, message: `오류: ${error.message}` }); }
     });
 
-    // 2. 자동 로그인 (POST /v1/auth/auto-login)
+    /**
+     * @swagger
+     * /v1/auth/auto-login:
+     * post:
+     * summary: 토큰 기반 자동 로그인
+     * tags: [Auth]
+     * requestBody:
+     * required: true
+     * content:
+     * application/json:
+     * schema:
+     * type: object
+     * properties:
+     * token: { type: string, example: "a1b2c3d4-e5f6-7g8h..." }
+     * responses:
+     * 200:
+     * description: 토큰 인증 성공
+     */
     router.post('/auth/auto-login', async (req, res) => {
         const { token } = req.body;
         if (!token) return res.status(401).json({ success: false, message: '토큰 없음' });
@@ -118,31 +150,61 @@ export default function v1Router(db) {
         } catch (error) { res.status(500).json({ success: false, message: `오류: ${error.message}` }); }
     });
 
-    // 3. 연동 해제 (POST /v1/auth/disconnect)
+    /**
+     * @swagger
+     * /v1/auth/disconnect:
+     * post:
+     * summary: 계정 연동 해제 및 데이터 파기
+     * tags: [Auth]
+     * requestBody:
+     * required: true
+     * content:
+     * application/json:
+     * schema:
+     * type: object
+     * properties:
+     * studentId: { type: string, example: "s2024010101" }
+     * token: { type: string }
+     * responses:
+     * 200:
+     * description: 연동 해제 완료
+     */
     router.post('/auth/disconnect', async (req, res) => {
         const { studentId, token } = req.body;
         try {
             await db.collection('users').doc(studentId).delete();
             if (token) await db.collection('sessions').doc(token).delete();
-            // 연동 해제 시 관련된 캐시도 깔끔하게 삭제
             myCache.del(`apps_${studentId}`);
             res.json({ success: true, message: '계정 연동이 해제되었습니다.' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
 
-    // 4. 신청 내역 조회 (GET /v1/applications) - 🟢 캐싱 레이어 적용
+    /**
+     * @swagger
+     * /v1/applications:
+     * get:
+     * summary: 자율학습 및 외출/외박 신청 내역 조회 (캐싱 적용)
+     * tags: [Applications]
+     * parameters:
+     * - in: query
+     * name: studentId
+     * required: true
+     * schema: { type: string }
+     * - in: query
+     * name: token
+     * required: true
+     * schema: { type: string }
+     * responses:
+     * 200:
+     * description: 신청 내역 배열 반환
+     */
     router.get('/applications', async (req, res) => {
         const { studentId, token } = req.query;
         if (!token) return res.status(401).json({ success: false, message: '토큰 누락' });
 
-        // 🟢 1) 캐시 확인
         const cacheKey = `apps_${studentId}`;
         const cachedData = myCache.get(cacheKey);
-        
-        if (cachedData) {
-            console.log(`[Cache Hit] ${studentId} 데이터 메모리 즉시 반환 (0초 소요)`);
-            return res.json(cachedData);
-        }
+        if (cachedData) return res.json(cachedData);
 
         try {
             const sessionDoc = await db.collection('sessions').doc(token).get();
@@ -151,7 +213,6 @@ export default function v1Router(db) {
             const userDoc = await db.collection('users').doc(studentId).get();
             const client = await getAuthenticatedSession(studentId, decrypt(userDoc.data().encryptedPw));
 
-            // 자율학습 파싱
             const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/list.php`);
             const $study = cheerio.load(studyRes.data);
             const studyList = [];
@@ -167,7 +228,6 @@ export default function v1Router(db) {
                 }
             });
 
-            // 외출/외박 파싱
             const outRes = await client.get(`${SCHOOL_BASE_URL}/out/list.php`);
             const $out = cheerio.load(outRes.data);
             const outList = [];
@@ -184,16 +244,36 @@ export default function v1Router(db) {
                 }
             });
 
-            // 🟢 2) 새로 파싱한 데이터 응답 객체 조립 후 캐시에 저장
             const responseData = { success: true, studyList, outList };
             myCache.set(cacheKey, responseData);
-            console.log(`[Cache Miss] ${studentId} 스크래핑 후 캐시에 저장됨`);
-            
             res.json(responseData);
         } catch (error) { res.status(500).json({ success: false, message: `서버 오류: ${error.message}` }); }
     });
 
-    // 5. 자율학습 신청 (POST /v1/applications/study)
+    /**
+     * @swagger
+     * /v1/applications/study:
+     * post:
+     * summary: 자율학습 신청 대행
+     * tags: [Applications]
+     * requestBody:
+     * required: true
+     * content:
+     * application/json:
+     * schema:
+     * type: object
+     * properties:
+     * studentId: { type: string }
+     * token: { type: string }
+     * date: { type: integer, description: "신청 날짜 (Unix Timestamp)" }
+     * time: { type: string, example: "08:00" }
+     * place: { type: string, example: "1" }
+     * detail: { type: string, example: "면학실" }
+     * detail_reason: { type: string }
+     * responses:
+     * 201:
+     * description: 신청 성공
+     */
     router.post('/applications/study', async (req, res) => {
         const { studentId, token, date, time, place, detail, detail_reason } = req.body;
         try {
@@ -204,14 +284,34 @@ export default function v1Router(db) {
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }});
             if (String(response.data).includes('실패') || String(response.data).includes('history.back')) return res.status(400).json({ success: false, message: '신청 기간 아님 / 이미 신청됨' });
             
-            // 🟢 3) 상태 변경이 일어났으므로 해당 학생의 캐시 무효화(삭제)
             myCache.del(`apps_${studentId}`);
-
             res.json({ success: true, message: '완료' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
 
-    // 6. 외출 신청 (POST /v1/applications/out)
+    /**
+     * @swagger
+     * /v1/applications/out:
+     * post:
+     * summary: 외출/외박 신청 대행
+     * tags: [Applications]
+     * requestBody:
+     * required: true
+     * content:
+     * application/json:
+     * schema:
+     * type: object
+     * properties:
+     * studentId: { type: string }
+     * token: { type: string }
+     * type: { type: string, example: "외출" }
+     * reason: { type: string, example: "병원 진료" }
+     * bdate: { type: integer, description: "시작 시간 Timestamp" }
+     * edate: { type: integer, description: "종료 시간 Timestamp" }
+     * responses:
+     * 201:
+     * description: 신청 완료
+     */
     router.post('/applications/out', async (req, res) => {
         const { studentId, token, type, reason, bdate, edate } = req.body;
         try {
@@ -222,14 +322,41 @@ export default function v1Router(db) {
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }});
             if (String(response.data).includes('실패') || String(response.data).includes('history.back')) return res.status(400).json({ success: false, message: '외출 거절됨' });
             
-            // 🟢 캐시 무효화
             myCache.del(`apps_${studentId}`);
-
             res.json({ success: true, message: '완료' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
 
-    // 7. 삭제 및 취소 (DELETE /v1/applications/:type/:id)
+    /**
+     * @swagger
+     * /v1/applications/{type}/{id}:
+     * delete:
+     * summary: 신청 내역 취소/삭제
+     * tags: [Applications]
+     * parameters:
+     * - in: path
+     * name: type
+     * required: true
+     * schema: { type: string, enum: [study, out] }
+     * description: "취소할 종류 (study 또는 out)"
+     * - in: path
+     * name: id
+     * required: true
+     * schema: { type: string }
+     * description: "취소할 항목의 고유 ID"
+     * requestBody:
+     * required: true
+     * content:
+     * application/json:
+     * schema:
+     * type: object
+     * properties:
+     * studentId: { type: string }
+     * token: { type: string }
+     * responses:
+     * 200:
+     * description: 삭제 성공
+     */
     router.delete('/applications/:type/:id', async (req, res) => {
         const { type, id } = req.params;
         const { studentId, token } = req.body;
@@ -246,9 +373,7 @@ export default function v1Router(db) {
             if (text.includes('PERM_ERR')) return res.status(403).json({ success: false, message: '권한 없음' });
             if (text.includes('CHANGED_STATE_EXIST')) return res.status(400).json({ success: false, message: '이미 승인/거절되어 삭제 불가' });
             
-            // 🟢 캐시 무효화 (프론트에서 백그라운드 갱신 요청 시 신선한 데이터를 받게 됨)
             myCache.del(`apps_${studentId}`);
-
             res.json({ success: true, message: '삭제됨' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
