@@ -9,5 +9,8 @@
     "express": "^5.2.1",
     "firebase-admin": "^13.10.0",
     "tough-cookie": "^6.0.1"
+  },
+  "overrides": {
+    "agent-base": "^6.0.2"
   }
 }
