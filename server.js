@@ -11,8 +11,8 @@ import 'dotenv/config';
 const app = express();
 
 app.use(cors({
-    origin: '*',
-    methods: ['POST', 'GET', 'OPTIONS'],
+    origin: '*', // 추후 미들웨어에서 제어하므로 Express 단에서는 우선 열어둡니다.
+    methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
     allowedHeaders: ['Content-Type', 'x-api-key']
 }));
 app.use(express.json());
@@ -28,23 +28,48 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-const verifyApiKey = async (req, res, next) => {
+// 🟢 [Step 1] 동적 API Key 및 도메인 검증 미들웨어
+const verifyDeveloperApiKey = async (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
+    
     const apiKey = req.headers['x-api-key'];
     if (!apiKey) return res.status(401).json({ success: false, message: 'API Key가 누락되었습니다.' });
+    
     try {
-        const keyDoc = await db.collection('api_keys').doc(apiKey).get();
-        if (!keyDoc.exists) return res.status(403).json({ success: false, message: '유효하지 않은 API Key입니다.' });
+        // developers 컬렉션에서 서드파티 개발자 정보 조회
+        const keyDoc = await db.collection('developers').doc(apiKey).get();
+        if (!keyDoc.exists) {
+            return res.status(403).json({ success: false, message: '유효하지 않은 API Key입니다.' });
+        }
+
+        const devData = keyDoc.data();
+
+        // 계정 활성화 상태 검증
+        if (devData.isActive === false) {
+            return res.status(403).json({ success: false, message: '사용이 정지된 API Key입니다.' });
+        }
+
+        // 도메인 화이트리스트 검증 (브라우저 요청일 경우)
+        const origin = req.headers.origin;
+        const allowedDomains = devData.allowedDomains || [];
+        if (origin && allowedDomains.length > 0 && !allowedDomains.includes(origin)) {
+            return res.status(403).json({ success: false, message: `허용되지 않은 도메인(${origin})에서의 접근입니다.` });
+        }
+
+        // 통과 시 req 객체에 개발자 정보 세팅
+        req.developer = devData;
         next();
     } catch (error) {
-        return res.status(500).json({ success: false, message: '인증 서버 오류' });
+        console.error('API Key 검증 오류:', error);
+        return res.status(500).json({ success: false, message: '인증 서버 내부 오류' });
     }
 };
 
 app.get('/', (req, res) => {
-    res.send('🚀 Sasadomi System Public API Hub is running perfectly!');
+    res.send('🚀 Sasadomi System Public API Hub (v1) is running perfectly!');
 });
 
+// --- 암복호화 및 스크래핑 유틸리티 ---
 const ENCRYPTION_KEY = process.env.SECRET_KEY || 'a'.repeat(32); 
 const IV_LENGTH = 16;
 
@@ -110,8 +135,14 @@ function parseTable(html) {
     return list;
 }
 
-// [API 1] 로그인 정보 저장 및 상벌점 스크래핑
-app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
+// 🟢 [Step 2] RESTful API 버전 1 라우터 생성
+const v1Router = express.Router();
+v1Router.use(verifyDeveloperApiKey); // v1 하위 모든 요청에 미들웨어 적용
+
+// ---------------------------------------------
+// 1. 인증(Auth) 관련 엔드포인트
+// ---------------------------------------------
+v1Router.post('/auth/login', async (req, res) => {
     const { studentId, studentPw, grade, sclass, number } = req.body;
     try {
         const client = await getAuthenticatedSession(studentId, studentPw);
@@ -130,14 +161,12 @@ app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
 
         const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
         const $reward = cheerio.load(rewardResponse.data);
-        let rewardText = $reward('#rewordTab p').eq(1).text() || '0';
-        const totalReward = rewardText.replace(/[^0-9]/g, '') || '0';
+        const totalReward = ($reward('#rewordTab p').eq(1).text() || '0').replace(/[^0-9]/g, '') || '0';
         const rewardList = parseTable(rewardResponse.data);
 
         const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
         const $penalty = cheerio.load(penaltyResponse.data);
-        let penaltyText = $penalty('#punishmentTab p').eq(1).text() || '0';
-        const totalPenalty = penaltyText.replace(/[^0-9]/g, '') || '0';
+        const totalPenalty = ($penalty('#punishmentTab p').eq(1).text() || '0').replace(/[^0-9]/g, '') || '0';
         const penaltyList = parseTable(penaltyResponse.data);
 
         res.json({ success: true, sessionToken, totalReward, totalPenalty, rewardList, penaltyList });
@@ -147,8 +176,7 @@ app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API] 자동 로그인
-app.post('/api/auto-login', verifyApiKey, async (req, res) => {
+v1Router.post('/auth/auto-login', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ success: false, message: '토큰 없음' });
     try {
@@ -180,9 +208,24 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API 2] 자율학습 신청 대행
-app.post('/api/apply-study', verifyApiKey, async (req, res) => {
-    const { studentId, token, date, time, place, detail, detail_reason } = req.body;
+v1Router.post('/auth/disconnect', async (req, res) => {
+    const { studentId, token } = req.body;
+    if (!studentId) return res.status(400).json({ success: false, message: '학번이 필요합니다.' });
+    try {
+        await db.collection('users').doc(studentId).delete();
+        if (token) await db.collection('sessions').doc(token).delete();
+        res.json({ success: true, message: '계정 연동이 안전하게 해제되었습니다.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: `연동 해제 중 에러: ${error.message}` });
+    }
+});
+
+// ---------------------------------------------
+// 2. 내역 조회 및 신청(Applications) 엔드포인트
+// ---------------------------------------------
+// GET 메서드로 변경. Query 파라미터 활용 (?studentId=...&token=...)
+v1Router.get('/applications', async (req, res) => {
+    const { studentId, token } = req.query; 
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
 
     try {
@@ -197,6 +240,68 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
         const userData = userDoc.data();
         const rawPassword = decrypt(userData.encryptedPw);
         const client = await getAuthenticatedSession(studentId, rawPassword);
+
+        const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/list.php`);
+        const $study = cheerio.load(studyRes.data);
+        const studyList = [];
+        
+        $study('table.table.table-hover tbody tr').each((i, el) => {
+            const tds = $study(el).find('td');
+            if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
+                const id = tds.eq(0).find('input[type=checkbox]').val() || '';
+                studyList.push({
+                    id: id,
+                    date: tds.eq(2).text().trim(),
+                    time: tds.eq(3).text().trim(),
+                    place: tds.eq(4).text().trim(),
+                    detail: tds.eq(5).text().trim(),
+                    status: tds.last().text().trim() || '대기'
+                });
+            }
+        });
+
+        const outRes = await client.get(`${SCHOOL_BASE_URL}/out/list.php`);
+        const $out = cheerio.load(outRes.data);
+        const outList = [];
+        
+        $out('table.table.table-hover tbody tr').each((i, el) => {
+            const tds = $out(el).find('td');
+            if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
+                const id = tds.eq(0).find('input[name=itemCheck]').val() || '';
+                const type = tds.eq(2).text().trim();
+                const timeText = tds.eq(3).text().replace(/\s+/g, ' ').trim(); 
+                
+                const timeParts = timeText.split('-').map(t => t.trim());
+                outList.push({
+                    id: id,
+                    type: type,
+                    reason: tds.eq(4).text().trim(),
+                    outDate: timeParts[0] || '',
+                    inDate: timeParts[1] || '',
+                    status: tds.eq(6).text().trim() || '대기'
+                });
+            }
+        });
+
+        res.json({ success: true, studyList, outList });
+    } catch (error) {
+        console.error("내역 조회 에러:", error);
+        res.status(500).json({ success: false, message: `내역 조회 중 서버 에러: ${error.message}` });
+    }
+});
+
+v1Router.post('/applications/study', async (req, res) => {
+    const { studentId, token, date, time, place, detail, detail_reason } = req.body;
+    if (!token) return res.status(401).json({ success: false, message: '인증 토큰 누락' });
+    // ... 세션 조회, getAuthenticatedSession 등 (중략 방지: 아래 로직 그대로)
+    try {
+        const sessionDoc = await db.collection('sessions').doc(token).get();
+        if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
+            return res.status(401).json({ success: false, message: '권한 없음' });
+        }
+        const userDoc = await db.collection('users').doc(studentId).get();
+        const userData = userDoc.data();
+        const client = await getAuthenticatedSession(studentId, decrypt(userData.encryptedPw));
 
         const params = new URLSearchParams({
             mode: 'apply', reason: '1',
@@ -211,35 +316,26 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
         });
 
         const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-
-        if (responseText.includes('history.back') || responseText.includes('alert(') || responseText.includes('실패')) {
-            return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다. (이미 신청됨 혹은 신청 기간 아님)' });
+        if (responseText.includes('history.back') || responseText.includes('실패')) {
+            return res.status(400).json({ success: false, message: '신청 기간 아님 / 이미 신청됨' });
         }
-
-        res.json({ success: true, message: '자율학습 신청 완료' });
+        res.status(201).json({ success: true, message: '신청 완료' });
     } catch (error) {
-        console.error("자율학습 신청 에러 디테일:", error);
-        res.status(500).json({ success: false, message: `자율학습 신청 내부 서버 에러: ${error.message}` });
+        res.status(500).json({ success: false, message: `서버 에러: ${error.message}` });
     }
 });
 
-// [API 3] 외출/외박 신청 대행
-app.post('/api/apply-out', verifyApiKey, async (req, res) => {
+v1Router.post('/applications/out', async (req, res) => {
     const { studentId, token, type, reason, bdate, edate } = req.body;
-    if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
-
+    if (!token) return res.status(401).json({ success: false, message: '인증 토큰 누락' });
     try {
         const sessionDoc = await db.collection('sessions').doc(token).get();
         if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
-            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
+            return res.status(401).json({ success: false, message: '권한 없음' });
         }
-
         const userDoc = await db.collection('users').doc(studentId).get();
-        if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
-        
         const userData = userDoc.data();
-        const rawPassword = decrypt(userData.encryptedPw);
-        const client = await getAuthenticatedSession(studentId, rawPassword);
+        const client = await getAuthenticatedSession(studentId, decrypt(userData.encryptedPw));
 
         const params = new URLSearchParams({
             mode: 'apply',
@@ -253,34 +349,20 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
         });
 
         const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-
-        if (responseText.includes('history.back') || responseText.includes('alert(') || responseText.includes('실패')) {
-            return res.status(400).json({ success: false, message: '학교 시스템에서 외출 처리를 거부했습니다.' });
+        if (responseText.includes('history.back') || responseText.includes('실패')) {
+            return res.status(400).json({ success: false, message: '외출 처리가 거부됨' });
         }
-
-        res.json({ success: true, message: '외출/외박 신청 완료' });
+        res.status(201).json({ success: true, message: '외출/외박 신청 완료' });
     } catch (error) {
-        console.error("외출 신청 에러 디테일:", error);
-        res.status(500).json({ success: false, message: `외출/외박 신청 내부 서버 에러: ${error.message}` });
+        res.status(500).json({ success: false, message: `서버 에러: ${error.message}` });
     }
 });
 
-// [API 4] 계정 연동 해제
-app.post('/api/disconnect', verifyApiKey, async (req, res) => {
-    const { studentId, token } = req.body;
-    if (!studentId) return res.status(400).json({ success: false, message: '학번이 필요합니다.' });
-    try {
-        await db.collection('users').doc(studentId).delete();
-        if (token) await db.collection('sessions').doc(token).delete();
-        res.json({ success: true, message: '계정 연동이 안전하게 해제되었습니다.' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: `연동 해제 중 에러: ${error.message}` });
-    }
-});
+// DELETE 메서드 적용 (Params 활용: /v1/applications/out/1234)
+v1Router.delete('/applications/:type/:id', async (req, res) => {
+    const { type, id } = req.params;
+    const { studentId, token } = req.body; 
 
-// [API 5] 신청 내역(자율학습, 외출/외박) 조회
-app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
-    const { studentId, token } = req.body;
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
 
     try {
@@ -293,115 +375,31 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
         
         const userData = userDoc.data();
-        const rawPassword = decrypt(userData.encryptedPw);
-        const client = await getAuthenticatedSession(studentId, rawPassword);
-
-        // 1. 자율학습 신청 내역 파싱 (체크박스 예외 대응 추가)
-        const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/list.php`);
-        const $study = cheerio.load(studyRes.data);
-        const studyList = [];
-        
-        $study('table.table.table-hover tbody tr').each((i, el) => {
-            const tds = $study(el).find('td');
-            if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
-                // 체크박스가 없는 경우를 대비해 기본값 빈 문자열 설정
-                const id = tds.eq(0).find('input[type=checkbox]').val() || '';
-                studyList.push({
-                    id: id,
-                    date: tds.eq(2).text().trim(),
-                    time: tds.eq(3).text().trim(),
-                    place: tds.eq(4).text().trim(),
-                    detail: tds.eq(5).text().trim(),
-                    status: tds.last().text().trim() || '대기'
-                });
-            }
-        });
-
-        // 2. 외출/외박 신청 내역 파싱 (체크박스 부재 조건 완벽 분기)
-        const outRes = await client.get(`${SCHOOL_BASE_URL}/out/list.php`);
-        const $out = cheerio.load(outRes.data);
-        const outList = [];
-        
-        $out('table.table.table-hover tbody tr').each((i, el) => {
-            const tds = $out(el).find('td');
-            if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
-                // 🟢 체크박스(input[name=itemCheck])가 없을 경우 val()은 undefined가 되므로 '' 할당
-                const id = tds.eq(0).find('input[name=itemCheck]').val() || '';
-                const type = tds.eq(2).text().trim();
-                const timeText = tds.eq(3).text().replace(/\s+/g, ' ').trim(); 
-                
-                const timeParts = timeText.split('-').map(t => t.trim());
-                const outDate = timeParts[0] || '';
-                const inDate = timeParts[1] || '';
-
-                outList.push({
-                    id: id, // 삭제 불가능한 항목은 id가 ''로 들어감
-                    type: type,
-                    reason: tds.eq(4).text().trim(),
-                    outDate: outDate,
-                    inDate: inDate,
-                    status: tds.eq(6).text().trim() || '대기'
-                });
-            }
-        });
-
-        res.json({ success: true, studyList, outList });
-    } catch (error) {
-        console.error("내역 조회 에러:", error);
-        res.status(500).json({ success: false, message: `내역 조회 중 서버 에러: ${error.message}` });
-    }
-});
-
-// [API 6] 신청 내역 원본 삭제/취소 대행
-app.post('/api/delete-application', verifyApiKey, async (req, res) => {
-    const { studentId, token, type, del_items } = req.body;
-    if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
-    if (!del_items) return res.status(400).json({ success: false, message: '삭제할 항목의 고유 ID가 누락되었습니다.' });
-
-    try {
-        const sessionDoc = await db.collection('sessions').doc(token).get();
-        if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
-            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
-        }
-
-        const userDoc = await db.collection('users').doc(studentId).get();
-        if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
-        
-        const userData = userDoc.data();
-        const rawPassword = decrypt(userData.encryptedPw);
-        const client = await getAuthenticatedSession(studentId, rawPassword);
+        const client = await getAuthenticatedSession(studentId, decrypt(userData.encryptedPw));
 
         const actionUrl = type === 'out' 
             ? `${SCHOOL_BASE_URL}/Lib/school_out.action.php` 
             : `${SCHOOL_BASE_URL}/Lib/study_apply.action.php`;
 
-        const params = new URLSearchParams({
-            mode: 'apply_del',
-            del_items: del_items
-        });
+        const params = new URLSearchParams({ mode: 'apply_del', del_items: id });
 
         const response = await client.post(actionUrl, params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
         const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+        if (responseText.includes('PERM_ERR')) return res.status(403).json({ success: false, message: '권한 없음' });
+        if (responseText.includes('CHANGED_STATE_EXIST')) return res.status(400).json({ success: false, message: '변경 불가 상태' });
+        if (responseText.includes('실패')) return res.status(400).json({ success: false, message: '삭제 실패' });
 
-        if (responseText.includes('PERM_ERR')) {
-            return res.status(403).json({ success: false, message: '권한이 없습니다.' });
-        }
-        if (responseText.includes('CHANGED_STATE_EXIST')) {
-            return res.status(400).json({ success: false, message: '관리자가 이미 처리(승인/거절)하여 복구 또는 삭제할 수 없는 상태입니다.' });
-        }
-        if (responseText.includes('실패')) {
-            return res.status(400).json({ success: false, message: '삭제 처리에 실패했습니다.' });
-        }
-
-        res.json({ success: true, message: '정상적으로 취소/삭제되었습니다.' });
+        res.json({ success: true, message: '정상 취소됨' });
     } catch (error) {
-        console.error("삭제 위임 에러:", error);
-        res.status(500).json({ success: false, message: `삭제 처리 중 내부 오류: ${error.message}` });
+        res.status(500).json({ success: false, message: `서버 오류: ${error.message}` });
     }
 });
 
+// 메인 앱에 v1 라우터 결합
+app.use('/v1', v1Router);
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`공용 오픈 API 서버 작동 중 :: 포트 ${PORT}`));
+app.listen(PORT, () => console.log(`Sasadomi API (v1) 구동 중 :: 포트 ${PORT}`));
