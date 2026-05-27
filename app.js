@@ -336,7 +336,7 @@ async function fetchApplications(studentId, token) {
     }
 }
 
-// 📌 자율학습 리스트 렌더링 (체크박스 유무 조건부 버튼 분기)
+// 📌 자율학습 리스트 렌더링 (체크박스 유무 조건부 버튼 분기 및 고유 ID 부여)
 function renderStudyList(list) {
     const tbody = document.querySelector('#studyHistoryTable tbody');
     tbody.innerHTML = '';
@@ -347,12 +347,14 @@ function renderStudyList(list) {
     }
     
     list.forEach(item => {
-        // 🟢 ID가 있는 경우에만 삭제 버튼 생성, 없는 경우 취소불가 안내문 제공
         const actionHtml = item.id 
             ? `<button onclick="deleteApplication('study', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>`
             : `<span style="margin-left:8px; color:#aaa; font-size:11px; font-weight:normal;">[변경불가]</span>`;
 
         const tr = document.createElement('tr');
+        // 🟢 실시간 삭제 처리를 위해 tr 엘리먼트에 고유 ID 할당
+        if (item.id) tr.id = `row-study-${item.id}`;
+
         tr.innerHTML = `
             <td>${item.date}</td>
             <td>${item.time}</td>
@@ -367,7 +369,7 @@ function renderStudyList(list) {
     });
 }
 
-// 📌 외출/외박 리스트 렌더링 (체크박스 유무 조건부 버튼 분기)
+// 📌 외출/외박 리스트 렌더링 (체크박스 유무 조건부 버튼 분기 및 고유 ID 부여)
 function renderOutList(list) {
     const tbody = document.querySelector('#outHistoryTable tbody');
     tbody.innerHTML = '';
@@ -378,12 +380,14 @@ function renderOutList(list) {
     }
     
     list.forEach(item => {
-        // 🟢 기숙사 웹사이트에 체크박스가 없어 ID가 비어('') 들어온 경우 삭제 버튼 숨김 처리
         const actionHtml = item.id 
             ? `<button onclick="deleteApplication('out', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>`
             : `<span style="margin-left:8px; color:#999; font-size:11px; font-style:italic;">[취소불가]</span>`;
 
         const tr = document.createElement('tr');
+        // 🟢 실시간 삭제 처리를 위해 tr 엘리먼트에 고유 ID 할당
+        if (item.id) tr.id = `row-out-${item.id}`;
+
         tr.innerHTML = `
             <td><strong>${item.type}</strong></td>
             <td>${item.reason}</td>
@@ -398,9 +402,8 @@ function renderOutList(list) {
     });
 }
 
-// 📌 신청 내역 원본 삭제 처리 함수
+// 📌 신청 내역 원본 삭제 처리 함수 (실시간 DOM 제거 기능 반영)
 async function deleteApplication(type, id) {
-    // 혹시 모를 프론트 단 이중 방어막 예외 처리
     if (!id || id === 'undefined' || id === '') {
         alert("이 항목은 학교 시스템상 이미 확정되어 원격 취소/삭제가 불가능합니다.");
         return;
@@ -428,7 +431,25 @@ async function deleteApplication(type, id) {
         const data = await res.json();
         if (data.success) {
             alert('신청 항목이 성공적으로 삭제/취소 처리되었습니다.');
-            fetchApplications(currentStudentId, activeToken);
+            
+            // 🟢 [낙관적 업데이트] 서버 성공 응답 즉시 화면(DOM)에서 해당 로우 element 탐색 후 바로 삭제
+            const rowElement = document.getElementById(`row-${type}-${id}`);
+            if (rowElement) {
+                rowElement.remove();
+            }
+
+            // 🟢 삭제 후 테이블 내부 요소가 전부 사라졌다면 "내역이 없습니다" 안내 렌더링
+            const tableId = type === 'study' ? '#studyHistoryTable tbody' : '#outHistoryTable tbody';
+            const tbody = document.querySelector(tableId);
+            if (tbody && tbody.children.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+            }
+
+            // 🟢 학교 서버의 DB 물리 반영 속도를 배려하여 1초(1000ms)의 여유를 두고 백그라운드 갱신 진행
+            setTimeout(() => {
+                fetchApplications(currentStudentId, activeToken);
+            }, 1000);
+
         } else {
             alert(data.message || '삭제 실패');
         }
