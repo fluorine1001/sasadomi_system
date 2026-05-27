@@ -135,7 +135,7 @@ function toggleStudyFields(placeValue) {
     }
 }
 
-// 자율학습 신청 제출 (token 실어보내도록 수정)
+// 자율학습 신청 제출
 async function submitStudy() {
     const rawDate = document.getElementById('studyDate').value;
     const time = document.getElementById('studyTime').value;
@@ -146,12 +146,12 @@ async function submitStudy() {
     const dateObj = new Date(rawDate + 'T00:00:00');
     const timestampSeconds = Math.floor(dateObj.getTime() / 1000);
 
-    // 🟢 로컬 스토리지에서 세션 토큰 가져오기
+    // 로컬 스토리지에서 세션 토큰 가져오기
     const savedToken = localStorage.getItem('sasa_sessionToken');
 
     const payload = {
         studentId: currentStudentId,
-        token: savedToken, // 🟢 백엔드로 토큰 전송
+        token: savedToken, 
         date: timestampSeconds,
         time: time,
         place: place
@@ -186,7 +186,7 @@ async function submitStudy() {
     }
 }
 
-// 외출 외박 신청 제출 (token 실어보내도록 수정)
+// 외출 외박 신청 제출
 async function submitOut() {
     const outType = document.getElementById('outType').value;
     const outReason = document.getElementById('outReason').value;
@@ -200,7 +200,7 @@ async function submitOut() {
     const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
     const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
 
-    // 🟢 로컬 스토리지에서 세션 토큰 가져오기
+    // 로컬 스토리지에서 세션 토큰 가져오기
     const savedToken = localStorage.getItem('sasa_sessionToken');
 
     try {
@@ -212,7 +212,7 @@ async function submitOut() {
             },
             body: JSON.stringify({
                 studentId: currentStudentId,
-                token: savedToken, // 🟢 백엔드로 토큰 전송
+                token: savedToken, 
                 type: outType,
                 reason: outReason,
                 bdate: bdateSec,
