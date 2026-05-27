@@ -1,20 +1,20 @@
-const express = require('express');
-const cors = require('cors');
-const crypto = require('crypto');
-const admin = require('firebase-admin');
-// 🛠️ 수정됨: 상단에서 require('axios-cookiejar-support') 제거 (ESM 크래시 방지)
-const { CookieJar } = require('tough-cookie');
-const axios = require('axios');
-const cheerio = require('cheerio');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import crypto from 'crypto';
+import admin from 'firebase-admin';
+import { wrapper } from 'axios-cookiejar-support';
+import { CookieJar } from 'tough-cookie';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import 'dotenv/config'; // require('dotenv').config() 대용
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🟢 새롭게 추가할 부분: 기본 주소 접속 시 인사말 출력 (서버 헬스 체크용)
+// 🟢 서버가 잘 살아있는지 브라우저에서 바로 확인할 수 있는 헬스 체크 주소
 app.get('/', (req, res) => {
-    res.send('🚀 Sasadomi System Backend is running perfectly!');
+    res.send('🚀 Sasadomi System Backend is running perfectly in ESM mode!');
 });
 
 // 1. Firebase Admin 초기화
@@ -56,10 +56,7 @@ const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 
 // 공통 함수: 학교 세션 로그인 후 Axios 인스턴스 반환
 async function getAuthenticatedSession(studentId, rawPassword) {
-    // 🛠️ 수정됨: ESM 패키지인 axios-cookiejar-support를 비동기(Dynamic import)로 안전하게 호출
-    const { wrapper } = await import('axios-cookiejar-support');
-    
-    // 요청이 올 때마다 각 유저만의 독립된 쿠키 바구니(Jar)와 클라이언트를 생성하여 쿠키 꼬임 방지
+    // 유저별로 독립된 쿠키 바구니 생성 (쿠키 꼬임 방지)
     const jar = new CookieJar();
     const client = wrapper(axios.create({ jar, withCredentials: true }));
 
@@ -162,7 +159,6 @@ app.post('/api/auto-login', async (req, res) => {
         const userData = userDoc.data();
         const rawPassword = decrypt(userData.encryptedPw);
 
-        // 복호화된 비번으로 학교 사이트 접속 후 실시간 데이터 로드
         const client = await getAuthenticatedSession(studentId, rawPassword);
         
         const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
@@ -262,7 +258,7 @@ app.post('/api/apply-out', async (req, res) => {
     }
 });
 
-// 📌 [API 4] 계정 연동 해제 (Firestore에서 학생 정보 완전 삭제 및 토큰 파기)
+// [API 4] 계정 연동 해제
 app.post('/api/disconnect', async (req, res) => {
     const { studentId, token } = req.body;
 
@@ -278,10 +274,8 @@ app.post('/api/disconnect', async (req, res) => {
             return res.status(404).json({ success: false, message: '연동된 계정 정보가 존재하지 않습니다.' });
         }
 
-        // DB에서 학생 계정 문서 삭제
         await userRef.delete();
 
-        // 전달받은 세션 토큰이 있다면 DB에서 해당 토큰 무효화(삭제)
         if (token) {
             await db.collection('sessions').doc(token).delete();
         }
