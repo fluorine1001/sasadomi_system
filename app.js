@@ -1,5 +1,8 @@
-// Render에 배포한 본인의 API 주소로 연동
+// Render 또는 Vercel에 배포한 본인의 API 주소로 연동
 const BACKEND_API_URL = 'https://sasadomi-system.vercel.app';
+
+// 🟢 [신규] 백엔드와 맞춘 API Key (Firebase Firestore의 api_keys 컬렉션에 등록한 문서 ID와 똑같이 적어줘!)
+const SASADOMI_API_KEY = '1MANmgyI4BbFbN2vq95K'; 
 
 let currentStudentId = '';
 
@@ -18,7 +21,11 @@ async function autoLogin(token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/auto-login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            // 🟢 헤더에 x-api-key 추가
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY 
+            },
             body: JSON.stringify({ token })
         });
 
@@ -28,7 +35,6 @@ async function autoLogin(token) {
             currentStudentId = data.studentId;
             renderDashboard(data);
         } else {
-            // 토큰이 만료되었거나 유효하지 않으면 로컬 데이터 정리
             clearSession();
         }
     } catch (error) {
@@ -49,7 +55,11 @@ async function syncAccount() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/login-and-fetch`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            // 🟢 헤더에 x-api-key 추가
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY 
+            },
             body: JSON.stringify({ studentId, studentPw, grade, sclass, number })
         });
 
@@ -58,7 +68,6 @@ async function syncAccount() {
         if (data.success) {
             currentStudentId = studentId;
 
-            // 💡 실무 보안: 비밀번호 대신 백엔드에서 발급한 '세션 토큰'만 저장
             if (document.getElementById('rememberMe') && document.getElementById('rememberMe').checked) {
                 localStorage.setItem('sasa_sessionToken', data.sessionToken);
             } else {
@@ -76,7 +85,7 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 분리 (재사용성을 위해)
+// 📌 대시보드 UI 렌더링 분리
 function renderDashboard(data) {
     document.getElementById('rewardView').innerText = data.totalReward;
     document.getElementById('penaltyView').innerText = data.totalPenalty;
@@ -106,10 +115,10 @@ function clearSession() {
     localStorage.removeItem('sasa_sessionToken');
 }
 
-// [기능] 자율학습 장소 변경 이벤트 핸들러 (본관 전용 조건부 필드 제어)
+// [기능] 자율학습 장소 변경 이벤트 핸들러
 function toggleStudyFields(placeValue) {
     const conditionalBox = document.getElementById('conditionalStudyFields');
-    if (placeValue === '3') { // 본관 선택 코드값 '3'
+    if (placeValue === '3') {
         conditionalBox.style.display = 'block';
     } else {
         conditionalBox.style.display = 'none';
@@ -143,7 +152,11 @@ async function submitStudy() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/apply-study`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            // 🟢 헤더에 x-api-key 추가
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY 
+            },
             body: JSON.stringify(payload)
         });
 
@@ -177,7 +190,11 @@ async function submitOut() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/apply-out`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            // 🟢 헤더에 x-api-key 추가
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY 
+            },
             body: JSON.stringify({
                 studentId: currentStudentId,
                 type: outType,
@@ -211,7 +228,11 @@ async function disconnectAccount() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/disconnect`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            // 🟢 헤더에 x-api-key 추가
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY 
+            },
             body: JSON.stringify({ studentId: currentStudentId, token: savedToken })
         });
 
@@ -220,7 +241,6 @@ async function disconnectAccount() {
         if (data.success) {
             alert('계정 연동이 안전하게 해제되었습니다.');
             
-            // 데이터 및 UI 초기화
             clearSession();
             currentStudentId = '';
             document.getElementById('dashboard').style.display = 'none';
