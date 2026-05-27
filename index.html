@@ -10,18 +10,12 @@
     <div class="container">
         <h1>🏫 기숙사 통합 관리 서비스</h1>
         
-        <div class="card card-login">
+        <div class="card card-login" id="loginForm">
             <h2>🔐 학생 계정 동기화 (최초 1회 필수)</h2>
             <div class="form-group-row">
-                <input type="text" id="studentId" placeholder="아이디/학번">
+                <input type="text" id="studentId" placeholder="아이디/학번 (예: s2026030601)">
                 <input type="password" id="studentPw" placeholder="비밀번호">
             </div>
-            <div class="form-group-row">
-                <input type="number" id="grade" placeholder="학년">
-                <input type="number" id="sclass" placeholder="반">
-                <input type="number" id="number" placeholder="번호">
-            </div>
-            
             <div style="margin-bottom: 15px; text-align: left; padding-left: 5px;">
                 <label style="cursor: pointer; user-select: none; font-size: 14px; color: #555;">
                     <input type="checkbox" id="rememberMe" style="cursor: pointer; margin-right: 5px;"> 로그인 상태 유지
