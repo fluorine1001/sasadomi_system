@@ -71,7 +71,6 @@ const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 
 async function getAuthenticatedSession(studentId, rawPassword) {
     const jar = new CookieJar();
-    // 🟢 학교 서버 접속 시 타임아웃 7초 설정 및 HTTP 에러 상태코드에서도 던지지 않도록 설정
     const client = wrapper(axios.create({ 
         jar, 
         withCredentials: true,
@@ -181,7 +180,7 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API 2] 자율학습 신청 대행 (🚨 에러 디버깅 강화)
+// [API 2] 자율학습 신청 대행
 app.post('/api/apply-study', verifyApiKey, async (req, res) => {
     const { studentId, token, date, time, place, detail, detail_reason } = req.body;
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
@@ -206,25 +205,28 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             detail: detail || '', detail_reason: detail_reason || ''
         });
 
-        // 🟢 validateStatus 추가로 학교 내부 서버 에러 시에도 백엔드가 crash 나지 않게 방어
         const response = await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             validateStatus: () => true 
         });
 
-        if (response.data.includes('history.back') || response.data.includes('alert(') || response.data.includes('실패')) {
+        // 🟢 [안전 패치] response.data가 객체(JSON)일 경우 문자열로 강제 변환하여 .includes() 에러 방지
+        const responseText = typeof response.data === 'string' 
+            ? response.data 
+            : JSON.stringify(response.data);
+
+        if (responseText.includes('history.back') || responseText.includes('alert(') || responseText.includes('실패')) {
             return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다. (이미 신청됨 혹은 신청 기간 아님)' });
         }
 
         res.json({ success: true, message: '자율학습 신청 완료' });
     } catch (error) {
         console.error("자율학습 신청 에러 디테일:", error);
-        // 🟢 프론트엔드 알림창에 상세 에러 원인(예: timeout, 원래 던져진 메세지 등)을 노출하도록 수정
         res.status(500).json({ success: false, message: `자율학습 신청 내부 서버 에러: ${error.message}` });
     }
 });
 
-// [API 3] 외출/외박 신청 대행 (🚨 에러 디버깅 강화)
+// [API 3] 외출/외박 신청 대행
 app.post('/api/apply-out', verifyApiKey, async (req, res) => {
     const { studentId, token, type, reason, bdate, edate } = req.body;
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
@@ -253,7 +255,12 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             validateStatus: () => true
         });
 
-        if (response.data.includes('history.back') || response.data.includes('alert(') || response.data.includes('실패')) {
+        // 🟢 [안전 패치] 외출 신청 쪽도 동일하게 데이터 타입 예외 방어
+        const responseText = typeof response.data === 'string' 
+            ? response.data 
+            : JSON.stringify(response.data);
+
+        if (responseText.includes('history.back') || responseText.includes('alert(') || responseText.includes('실패')) {
             return res.status(400).json({ success: false, message: '학교 시스템에서 외출 처리를 거부했습니다.' });
         }
 
