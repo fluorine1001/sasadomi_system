@@ -16,12 +16,11 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// [기능] 토큰을 이용한 자동 로그인
+// 🟢 [수정] 토큰을 이용한 자동 로그인
 async function autoLogin(token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/auto-login`, {
             method: 'POST',
-            // 🟢 헤더에 x-api-key 추가
             headers: { 
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
@@ -33,6 +32,11 @@ async function autoLogin(token) {
         
         if (data.success) {
             currentStudentId = data.studentId;
+            
+            // 🟢 자동 로그인 성공 시 로그인 폼 영역을 확실하게 숨김
+            const loginForm = document.getElementById('loginForm'); // 👈 본인의 HTML 로그인 감싸는 tag ID에 맞게 수정 가능
+            if (loginForm) loginForm.style.display = 'none';
+
             renderDashboard(data);
         } else {
             clearSession();
@@ -42,7 +46,7 @@ async function autoLogin(token) {
     }
 }
 
-// [기능] 계정 연동 및 데이터 패치 (최초 로그인)
+// 🟢 [수정] 계정 연동 및 데이터 패치 (최초 로그인)
 async function syncAccount() {
     const studentId = document.getElementById('studentId').value;
     const studentPw = document.getElementById('studentPw').value;
@@ -55,7 +59,6 @@ async function syncAccount() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/login-and-fetch`, {
             method: 'POST',
-            // 🟢 헤더에 x-api-key 추가
             headers: { 
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
@@ -74,6 +77,10 @@ async function syncAccount() {
                 clearSession();
             }
 
+            // 🟢 최초 로그인 성공 시에도 로그인 폼 영역을 확실하게 숨김
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) loginForm.style.display = 'none';
+
             renderDashboard(data);
             alert('성공적으로 계정이 연동 및 최신 데이터 동기화 완료되었습니다.');
         } else {
@@ -85,7 +92,7 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 분리
+// 🟢 [수정] 📌 대시보드 UI 렌더링 분리
 function renderDashboard(data) {
     document.getElementById('rewardView').innerText = data.totalReward;
     document.getElementById('penaltyView').innerText = data.totalPenalty;
@@ -107,6 +114,7 @@ function renderDashboard(data) {
         </tr>`;
     });
 
+    // 🟢 대시보드 켜기
     document.getElementById('dashboard').style.display = 'block';
 }
 
@@ -152,7 +160,6 @@ async function submitStudy() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/apply-study`, {
             method: 'POST',
-            // 🟢 헤더에 x-api-key 추가
             headers: { 
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
@@ -190,7 +197,6 @@ async function submitOut() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/apply-out`, {
             method: 'POST',
-            // 🟢 헤더에 x-api-key 추가
             headers: { 
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
@@ -217,7 +223,7 @@ async function submitOut() {
     }
 }
 
-// 📌 [기능] 계정 연동 해제
+// 🟢 [수정] 📌 [기능] 계정 연동 해제
 async function disconnectAccount() {
     if (!currentStudentId) return alert('현재 연동된 계정이 없습니다.');
     
@@ -228,7 +234,6 @@ async function disconnectAccount() {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/disconnect`, {
             method: 'POST',
-            // 🟢 헤더에 x-api-key 추가
             headers: { 
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
@@ -244,6 +249,11 @@ async function disconnectAccount() {
             clearSession();
             currentStudentId = '';
             document.getElementById('dashboard').style.display = 'none';
+            
+            // 🟢 연동 해제 시 로그인 폼 영역을 다시 보이게 함
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) loginForm.style.display = 'block';
+
             document.getElementById('studentId').value = '';
             document.getElementById('studentPw').value = '';
             document.getElementById('grade').value = '';
