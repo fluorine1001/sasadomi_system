@@ -274,7 +274,6 @@ async function disconnectAccount() {
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'block';
 
-            // 학년, 반, 번호 input 초기화 코드는 삭제됨 (id, pw만 초기화)
             document.getElementById('studentId').value = '';
             document.getElementById('studentPw').value = '';
             if (document.getElementById('rememberMe')) document.getElementById('rememberMe').checked = false;
