@@ -1,23 +1,23 @@
 import express from 'express';
 import cors from 'cors';
 import admin from 'firebase-admin';
-import rateLimit from 'express-rate-limit'; // 🟢 1. 속도 제한 라이브러리 추가
+import rateLimit from 'express-rate-limit';
 import 'dotenv/config';
 
-// 🟢 방금 만든 라우터 파일 임포트
+// 🟢 Swagger 관련 패키지 불러오기
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
+
 import v1Router from './routes/v1.js';
 
 const app = express();
 
-// 🟢 2. 속도 제한 설정 (API Key 기준)
+// 🟢 속도 제한 설정 (API Key 기준)
 const apiLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1분 동안
-    max: 30, // 최대 30회까지만 요청 허용
-    keyGenerator: (req) => req.headers['x-api-key'] || req.ip, // IP 대신 API Key를 기준으로 카운트
-    message: { 
-        success: false, 
-        message: '요청 한도를 초과했습니다. 1분 후에 다시 시도해 주세요. (Too Many Requests)' 
-    }
+    max: 30, // 최대 30회 허용
+    keyGenerator: (req) => req.headers['x-api-key'] || req.ip,
+    message: { success: false, message: '요청 한도를 초과했습니다. 1분 후에 다시 시도해 주세요.' }
 });
 
 app.use(cors({
@@ -27,8 +27,36 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// 🟢 3. 모든 /v1 하위 라우터에 속도 제한 미들웨어 적용
-app.use('/v1', apiLimiter, verifyDeveloperApiKey, v1Router(db, admin));
+// 🟢 Swagger API 문서 기본 정보 설정
+const swaggerOptions = {
+    definition: {
+        openapi: '3.0.0',
+        info: {
+            title: 'Sasadomi API',
+            version: '1.0.0',
+            description: '사사도미(Sasadomi) 비공식 REST API 사용 설명서 및 테스트 도구입니다.',
+        },
+        components: {
+            securitySchemes: {
+                ApiKeyAuth: {
+                    type: 'apiKey',
+                    in: 'header',
+                    name: 'x-api-key',
+                    description: '발급받은 API Key를 입력하세요.'
+                }
+            }
+        },
+        security: [{ ApiKeyAuth: [] }]
+    },
+    // routes 폴더 안의 모든 js 파일에서 주석을 읽어와 문서를 생성합니다.
+    apis: ['./routes/*.js'], 
+};
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+// 🟢 /api-docs 경로로 접속 시 Swagger UI 제공
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: "Sasadomi API Docs"
+}));
 
 // Firebase DB 초기화
 if (!admin.apps.length) {
@@ -45,6 +73,10 @@ const db = admin.firestore();
 // 🟢 API Key 검증 미들웨어
 const verifyDeveloperApiKey = async (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
+    
+    // api-docs(문서 페이지) 접속은 API Key 검증을 면제합니다. (누구나 문서는 볼 수 있어야 하므로)
+    if (req.path.startsWith('/api-docs')) return next();
+
     const apiKey = req.headers['x-api-key'];
     if (!apiKey) return res.status(401).json({ success: false, message: 'API Key 누락' });
     
@@ -64,8 +96,8 @@ app.get('/', (req, res) => {
     res.send('🚀 Sasadomi System Public API Hub is running!');
 });
 
-// 🟢 라우터 결합 (v1Router 함수에 db 객체를 넘겨주고 생성된 라우터를 사용)
-app.use('/v1', verifyDeveloperApiKey, v1Router(db));
+// 🟢 모든 /v1 하위 라우터에 속도 제한 및 인증 미들웨어 적용
+app.use('/v1', apiLimiter, verifyDeveloperApiKey, v1Router(db, admin));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`공용 오픈 API 서버 작동 중 :: 포트 ${PORT}`));
