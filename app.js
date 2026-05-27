@@ -2,7 +2,7 @@
 const BACKEND_API_URL = 'https://sasadomi-system.vercel.app';
 
 // 백엔드와 맞춘 API Key (Firebase Firestore의 developers 컬렉션 문서 ID와 매칭)
-const SASADOMI_API_KEY = '1MANmgyI4BbFbN2vq95K'; 
+const SASADOMI_API_KEY = 'dev_abc123xyz'; 
 
 let currentStudentId = '';
 let currentSessionToken = ''; // 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수
