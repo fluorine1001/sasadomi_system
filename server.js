@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import admin from 'firebase-admin';
+import rateLimit from 'express-rate-limit'; // 🟢 1. 속도 제한 라이브러리 추가
 import 'dotenv/config';
 
 // 🟢 방금 만든 라우터 파일 임포트
@@ -8,12 +9,26 @@ import v1Router from './routes/v1.js';
 
 const app = express();
 
+// 🟢 2. 속도 제한 설정 (API Key 기준)
+const apiLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1분 동안
+    max: 30, // 최대 30회까지만 요청 허용
+    keyGenerator: (req) => req.headers['x-api-key'] || req.ip, // IP 대신 API Key를 기준으로 카운트
+    message: { 
+        success: false, 
+        message: '요청 한도를 초과했습니다. 1분 후에 다시 시도해 주세요. (Too Many Requests)' 
+    }
+});
+
 app.use(cors({
     origin: '*', 
     methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
     allowedHeaders: ['Content-Type', 'x-api-key']
 }));
 app.use(express.json());
+
+// 🟢 3. 모든 /v1 하위 라우터에 속도 제한 미들웨어 적용
+app.use('/v1', apiLimiter, verifyDeveloperApiKey, v1Router(db, admin));
 
 // Firebase DB 초기화
 if (!admin.apps.length) {

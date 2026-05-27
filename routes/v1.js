@@ -4,10 +4,14 @@ import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import NodeCache from 'node-cache'; // 🟢 캐시 라이브러리 추가
 
 const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 const ENCRYPTION_KEY = process.env.SECRET_KEY || 'a'.repeat(32); 
 const IV_LENGTH = 16;
+
+// 🟢 캐시 메모리 저장소 생성 (데이터 보관 시간: 3분 = 180초)
+const myCache = new NodeCache({ stdTTL: 180, checkperiod: 120 });
 
 function encrypt(text) {
     let iv = crypto.randomBytes(IV_LENGTH);
@@ -68,7 +72,6 @@ export default function v1Router(db) {
             const client = await getAuthenticatedSession(studentId, studentPw);
             const encryptedPw = encrypt(studentPw);
             
-            // 주의: firestore.FieldValue.serverTimestamp() 대신 new Date() 사용 (의존성 최소화)
             await db.collection('users').doc(studentId).set({
                 studentId, encryptedPw, grade, class: sclass, number, updatedAt: new Date()
             }, { merge: true });
@@ -121,14 +124,26 @@ export default function v1Router(db) {
         try {
             await db.collection('users').doc(studentId).delete();
             if (token) await db.collection('sessions').doc(token).delete();
+            // 연동 해제 시 관련된 캐시도 깔끔하게 삭제
+            myCache.del(`apps_${studentId}`);
             res.json({ success: true, message: '계정 연동이 해제되었습니다.' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
 
-    // 4. 신청 내역 조회 (GET /v1/applications)
+    // 4. 신청 내역 조회 (GET /v1/applications) - 🟢 캐싱 레이어 적용
     router.get('/applications', async (req, res) => {
         const { studentId, token } = req.query;
         if (!token) return res.status(401).json({ success: false, message: '토큰 누락' });
+
+        // 🟢 1) 캐시 확인
+        const cacheKey = `apps_${studentId}`;
+        const cachedData = myCache.get(cacheKey);
+        
+        if (cachedData) {
+            console.log(`[Cache Hit] ${studentId} 데이터 메모리 즉시 반환 (0초 소요)`);
+            return res.json(cachedData);
+        }
+
         try {
             const sessionDoc = await db.collection('sessions').doc(token).get();
             if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) return res.status(401).json({ success: false, message: '권한 없음' });
@@ -169,7 +184,12 @@ export default function v1Router(db) {
                 }
             });
 
-            res.json({ success: true, studyList, outList });
+            // 🟢 2) 새로 파싱한 데이터 응답 객체 조립 후 캐시에 저장
+            const responseData = { success: true, studyList, outList };
+            myCache.set(cacheKey, responseData);
+            console.log(`[Cache Miss] ${studentId} 스크래핑 후 캐시에 저장됨`);
+            
+            res.json(responseData);
         } catch (error) { res.status(500).json({ success: false, message: `서버 오류: ${error.message}` }); }
     });
 
@@ -183,6 +203,10 @@ export default function v1Router(db) {
             
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }});
             if (String(response.data).includes('실패') || String(response.data).includes('history.back')) return res.status(400).json({ success: false, message: '신청 기간 아님 / 이미 신청됨' });
+            
+            // 🟢 3) 상태 변경이 일어났으므로 해당 학생의 캐시 무효화(삭제)
+            myCache.del(`apps_${studentId}`);
+
             res.json({ success: true, message: '완료' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
@@ -197,6 +221,10 @@ export default function v1Router(db) {
             
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }});
             if (String(response.data).includes('실패') || String(response.data).includes('history.back')) return res.status(400).json({ success: false, message: '외출 거절됨' });
+            
+            // 🟢 캐시 무효화
+            myCache.del(`apps_${studentId}`);
+
             res.json({ success: true, message: '완료' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
@@ -218,6 +246,9 @@ export default function v1Router(db) {
             if (text.includes('PERM_ERR')) return res.status(403).json({ success: false, message: '권한 없음' });
             if (text.includes('CHANGED_STATE_EXIST')) return res.status(400).json({ success: false, message: '이미 승인/거절되어 삭제 불가' });
             
+            // 🟢 캐시 무효화 (프론트에서 백그라운드 갱신 요청 시 신선한 데이터를 받게 됨)
+            myCache.del(`apps_${studentId}`);
+
             res.json({ success: true, message: '삭제됨' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
