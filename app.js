@@ -315,7 +315,7 @@ function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 
-// 📌 [신규 추가됨] 신청 내역 API 통신 및 렌더링 로직
+// 📌 신청 내역 API 통신 로직 (Vercel 백엔드 파이프라인 유지)
 async function fetchApplications(studentId, token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/fetch-applications`, {
@@ -330,6 +330,7 @@ async function fetchApplications(studentId, token) {
         const data = await res.json();
         
         if (data.success) {
+            // 🟢 백엔드에서 데이터 가공 시 분석한 고유 ID(value)가 item.id로 들어있어야 삭제 연동이 가능합니다.
             renderStudyList(data.studyList);
             renderOutList(data.outList);
         } else {
@@ -340,6 +341,7 @@ async function fetchApplications(studentId, token) {
     }
 }
 
+// 📌 자율학습 리스트 렌더링 (분석한 데이터 기반 삭제 버튼 기능 이식)
 function renderStudyList(list) {
     const tbody = document.querySelector('#studyHistoryTable tbody');
     tbody.innerHTML = '';
@@ -355,13 +357,17 @@ function renderStudyList(list) {
             <td>${item.date}</td>
             <td>${item.time}</td>
             <td>${item.place}</td>
-            <td>${item.detail}</td>
-            <td>${item.status}</td>
+            <td>${item.detail || '없음'}</td>
+            <td>
+                <span class="status-badge">${item.status}</span>
+                <button onclick="deleteApplication('study', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>
+            </td>
         `;
         tbody.appendChild(tr);
     });
 }
 
+// 📌 외출/외박 리스트 렌더링 (분석한 데이터 기반 삭제 버튼 기능 이식)
 function renderOutList(list) {
     const tbody = document.querySelector('#outHistoryTable tbody');
     tbody.innerHTML = '';
@@ -374,12 +380,56 @@ function renderOutList(list) {
     list.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${item.type}</td>
+            <td><strong>${item.type}</strong></td>
             <td>${item.reason}</td>
             <td>${item.outDate}</td>
             <td>${item.inDate}</td>
-            <td>${item.status}</td>
+            <td>
+                <span class="status-badge">${item.status}</span>
+                <button onclick="deleteApplication('out', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>
+            </td>
         `;
         tbody.appendChild(tr);
     });
+}
+
+// 📌 [신규 추가] 분석된 삭제 프로토콜 전송 함수 (Vercel 백엔드 경유형)
+async function deleteApplication(type, id) {
+    if (!id || id === 'undefined' || id === '') {
+        alert("삭제 처리를 위한 고유 식별자(ID)를 찾을 수 없습니다.");
+        return;
+    }
+    
+    if (!confirm("정말 이 신청 내역을 원본 기숙사 사이트에서 취소/삭제하시겠습니까?")) return;
+
+    const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
+
+    try {
+        // Vercel 백엔드 API 서버에 삭제 대행 요청 위임
+        const res = await fetch(`${BACKEND_API_URL}/api/delete-application`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY
+            },
+            body: JSON.stringify({
+                studentId: currentStudentId,
+                token: activeToken,
+                type: type,        // 'study' 또는 'out' 전달
+                del_items: id      // 학교 사이트 삭제 바디 규격명 매칭용 데이터
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            alert('신청 항목이 정상적으로 삭제되었습니다.');
+            // 취소 반영 후 목록 리로드
+            fetchApplications(currentStudentId, activeToken);
+        } else {
+            alert(data.message || '삭제에 실패했습니다.');
+        }
+    } catch (error) {
+        console.error("삭제 요청 통신 에러:", error);
+        alert("서버와 통신하는 중 에러가 발생했습니다.");
+    }
 }
