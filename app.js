@@ -1,16 +1,14 @@
 // Render 또는 Vercel에 배포한 본인의 API 주소로 연동
 const BACKEND_API_URL = 'https://sasadomi-system.vercel.app';
 
-// 백엔드와 맞춘 API Key (Firebase Firestore의 api_keys 컬렉션에 등록한 문서 ID와 똑같이 적어줘!)
+// 백엔드와 맞춘 API Key (Firebase Firestore의 developers 컬렉션 문서 ID와 매칭)
 const SASADOMI_API_KEY = '1MANmgyI4BbFbN2vq95K'; 
 
 let currentStudentId = '';
 let currentSessionToken = ''; // 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수
 
-// 📌 페이지 로드 시 토큰 기반 자동 로그인 시도
 window.addEventListener('DOMContentLoaded', () => {
     const savedToken = localStorage.getItem('sasa_sessionToken');
-    
     if (savedToken) {
         if (document.getElementById('rememberMe')) {
             document.getElementById('rememberMe').checked = true;
@@ -19,20 +17,16 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 토큰을 이용한 자동 로그인
+// 📌 REST API v1: 자동 로그인
 async function autoLogin(token) {
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/auto-login`, {
+        const res = await fetch(`${BACKEND_API_URL}/v1/auth/auto-login`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY 
-            },
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
             body: JSON.stringify({ token })
         });
 
         const data = await res.json();
-        
         if (data.success) {
             currentStudentId = data.studentId;
             currentSessionToken = token;
@@ -41,49 +35,37 @@ async function autoLogin(token) {
             if (loginForm) loginForm.style.display = 'none';
 
             renderDashboard(data);
-            
-            // 🟢 자동 로그인 성공 시 신청 내역 불러오기 추가
             fetchApplications(currentStudentId, currentSessionToken);
         } else {
             clearSession();
         }
-    } catch (error) {
-        console.error('자동 로그인 실패:', error);
-    }
+    } catch (error) { console.error('자동 로그인 실패:', error); }
 }
 
-// 📌 계정 연동 및 데이터 패치 (최초 로그인) - 학번 자동 파싱 로직 적용
+// 📌 REST API v1: 최초 로그인 및 연동
 async function syncAccount() {
     const rawStudentId = document.getElementById('studentId').value;
     const studentPw = document.getElementById('studentPw').value;
 
     if (!rawStudentId || !studentPw) return alert('아이디와 패스워드를 적어주세요.');
 
-    // 🟢 입력값 정리 및 소문자 변환
     const studentId = rawStudentId.trim().toLowerCase();
-
-    // 🟢 아이디 양식 검증 (길이가 11자리이고 's'로 시작하는지)
     if (studentId.length !== 11 || !studentId.startsWith('s')) {
         return alert('올바른 학번 양식(s년도학년반번호)으로 입력해 주세요.\n예: s2026030601');
     }
 
-    // 🟢 아이디 문자열 슬라이싱 및 앞자리 0 제거 파싱
     const grade = parseInt(studentId.substring(5, 7), 10).toString();
     const sclass = parseInt(studentId.substring(7, 9), 10).toString();
     const number = parseInt(studentId.substring(9, 11), 10).toString();
 
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/login-and-fetch`, {
+        const res = await fetch(`${BACKEND_API_URL}/v1/auth/login`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY 
-            },
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
             body: JSON.stringify({ studentId, studentPw, grade, sclass, number })
         });
 
         const data = await res.json();
-        
         if (data.success) {
             currentStudentId = studentId;
             currentSessionToken = data.sessionToken;
@@ -98,10 +80,7 @@ async function syncAccount() {
             if (loginForm) loginForm.style.display = 'none';
 
             renderDashboard(data);
-            
-            // 🟢 계정 연동(로그인) 성공 시 신청 내역 불러오기 추가
             fetchApplications(currentStudentId, currentSessionToken);
-            
             alert('성공적으로 계정이 연동 및 최신 데이터 동기화 완료되었습니다.');
         } else {
             alert(data.message || '인증 실패');
@@ -112,7 +91,7 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 분리
+// 📌 대시보드 UI 렌더링 (기존 로직 완벽 유지)
 function renderDashboard(data) {
     document.getElementById('rewardView').innerText = data.totalReward;
     document.getElementById('penaltyView').innerText = data.totalPenalty;
@@ -137,41 +116,25 @@ function renderDashboard(data) {
     document.getElementById('dashboard').style.display = 'block';
 }
 
-// 📌 세션 초기화 유틸리티
-function clearSession() {
-    localStorage.removeItem('sasa_sessionToken');
-}
+function clearSession() { localStorage.removeItem('sasa_sessionToken'); }
 
-// 자율학습 장소 변경 이벤트 핸들러
 function toggleStudyFields(placeValue) {
     const conditionalBox = document.getElementById('conditionalStudyFields');
-    if (placeValue === '3') {
-        conditionalBox.style.display = 'block';
-    } else {
-        conditionalBox.style.display = 'none';
-    }
+    if (placeValue === '3') conditionalBox.style.display = 'block';
+    else conditionalBox.style.display = 'none';
 }
 
-// 자율학습 신청 제출
+// 📌 REST API v1: 자율학습 신청
 async function submitStudy() {
     const rawDate = document.getElementById('studyDate').value;
     const time = document.getElementById('studyTime').value;
     const place = document.getElementById('studyPlace').value;
     
     if (!rawDate) return alert('날짜를 지정해 주세요.');
-    
-    const dateObj = new Date(rawDate + 'T00:00:00');
-    const timestampSeconds = Math.floor(dateObj.getTime() / 1000);
-
+    const timestampSeconds = Math.floor(new Date(rawDate + 'T00:00:00').getTime() / 1000);
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
-    const payload = {
-        studentId: currentStudentId,
-        token: activeToken,
-        date: timestampSeconds,
-        time: time,
-        place: place
-    };
+    const payload = { studentId: currentStudentId, token: activeToken, date: timestampSeconds, time: time, place: place };
 
     if (place === '3') {
         payload.detail = document.getElementById('studyDetail').value;
@@ -180,12 +143,9 @@ async function submitStudy() {
     }
 
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/apply-study`, {
+        const res = await fetch(`${BACKEND_API_URL}/v1/applications/study`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY 
-            },
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
             body: JSON.stringify(payload)
         });
 
@@ -193,19 +153,12 @@ async function submitStudy() {
         if (data.success) {
             alert('자율학습 신청 대행 요청이 처리되었습니다!');
             closeModal('studyModal');
-            
-            // 신청 완료 후 내역 테이블 최신화
             fetchApplications(currentStudentId, activeToken);
-        } else {
-            alert(data.message || '신청 실패');
-        }
-    } catch (error) {
-        console.error(error);
-        alert('서버 통신 중 오류가 발생했습니다.');
-    }
+        } else { alert(data.message || '신청 실패'); }
+    } catch (error) { alert('서버 통신 중 오류가 발생했습니다.'); }
 }
 
-// 외출 외박 신청 제출
+// 📌 REST API v1: 외출/외박 신청
 async function submitOut() {
     const outType = document.getElementById('outType').value;
     const outReason = document.getElementById('outReason').value;
@@ -218,125 +171,80 @@ async function submitOut() {
 
     const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
     const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
-
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/apply-out`, {
+        const res = await fetch(`${BACKEND_API_URL}/v1/applications/out`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY 
-            },
-            body: JSON.stringify({
-                studentId: currentStudentId,
-                token: activeToken,
-                type: outType,
-                reason: outReason,
-                bdate: bdateSec,
-                edate: edateSec
-            })
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
+            body: JSON.stringify({ studentId: currentStudentId, token: activeToken, type: outType, reason: outReason, bdate: bdateSec, edate: edateSec })
         });
 
         const data = await res.json();
         if (data.success) {
             alert('외출/외박 신청 연동 처리가 수락되었습니다.');
             closeModal('outModal');
-            
-            // 신청 완료 후 내역 테이블 최신화
             fetchApplications(currentStudentId, activeToken);
-        } else {
-            alert(data.message || '신청 실패');
-        }
-    } catch (error) {
-        console.error(error);
-        alert('서버 통신 중 오류가 발생했습니다.');
-    }
+        } else { alert(data.message || '신청 실패'); }
+    } catch (error) { alert('서버 통신 중 오류가 발생했습니다.'); }
 }
 
-// 계정 연동 해제
+// 📌 REST API v1: 연동 해제
 async function disconnectAccount() {
     if (!currentStudentId) return alert('현재 연동된 계정이 없습니다.');
-    
     if (!confirm('정말 계정 연동을 해제하시겠습니까?\n저장된 자동 로그인 정보가 즉시 삭제됩니다.')) return;
 
     const savedToken = localStorage.getItem('sasa_sessionToken');
 
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/disconnect`, {
+        const res = await fetch(`${BACKEND_API_URL}/v1/auth/disconnect`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY 
-            },
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
             body: JSON.stringify({ studentId: currentStudentId, token: savedToken })
         });
 
         const data = await res.json();
-        
         if (data.success) {
             alert('계정 연동이 안전하게 해제되었습니다.');
-            
             clearSession();
             currentStudentId = '';
             currentSessionToken = '';
             document.getElementById('dashboard').style.display = 'none';
-            
-            const loginForm = document.getElementById('loginForm');
-            if (loginForm) loginForm.style.display = 'block';
-
+            document.getElementById('loginForm').style.display = 'block';
             document.getElementById('studentId').value = '';
             document.getElementById('studentPw').value = '';
             if (document.getElementById('rememberMe')) document.getElementById('rememberMe').checked = false;
-            
             document.getElementById('rewardView').innerText = '0';
             document.getElementById('penaltyView').innerText = '0';
             document.querySelector('#historyTable tbody').innerHTML = '';
-            
             document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
             document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
-            
             closeModal('studyModal');
             closeModal('outModal');
-        } else {
-            alert(data.message || '연동 해제 실패');
-        }
-    } catch (error) {
-        console.error(error);
-        alert('서버 통신 중 오류가 발생했습니다.');
-    }
+        } else { alert(data.message || '연동 해제 실패'); }
+    } catch (error) { alert('서버 통신 중 오류가 발생했습니다.'); }
 }
 
 function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 
-// 📌 신청 내역 API 통신 로직
+// 📌 REST API v1: 신청 내역 조회 (GET 방식, 쿼리파라미터 사용)
 async function fetchApplications(studentId, token) {
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/fetch-applications`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY
-            },
-            body: JSON.stringify({ studentId, token })
+        const res = await fetch(`${BACKEND_API_URL}/v1/applications?studentId=${studentId}&token=${token}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY }
         });
         
         const data = await res.json();
-        
         if (data.success) {
             renderStudyList(data.studyList);
             renderOutList(data.outList);
-        } else {
-            console.error("신청 내역 조회 실패:", data.message);
-        }
-    } catch (error) {
-        console.error("신청 내역 통신 오류:", error);
-    }
+        } else { console.error("신청 내역 조회 실패:", data.message); }
+    } catch (error) { console.error("신청 내역 통신 오류:", error); }
 }
 
-// 📌 자율학습 리스트 렌더링 (체크박스 유무 조건부 버튼 분기 및 고유 ID 부여)
 function renderStudyList(list) {
     const tbody = document.querySelector('#studyHistoryTable tbody');
     tbody.innerHTML = '';
@@ -352,8 +260,7 @@ function renderStudyList(list) {
             : `<span style="margin-left:8px; color:#aaa; font-size:11px; font-weight:normal;">[변경불가]</span>`;
 
         const tr = document.createElement('tr');
-        // 🟢 실시간 삭제 처리를 위해 tr 엘리먼트에 고유 ID 할당
-        if (item.id) tr.id = `row-study-${item.id}`;
+        if (item.id) tr.id = `row-study-${item.id}`; // 실시간 삭제를 위한 ID 부여
 
         tr.innerHTML = `
             <td>${item.date}</td>
@@ -369,7 +276,6 @@ function renderStudyList(list) {
     });
 }
 
-// 📌 외출/외박 리스트 렌더링 (체크박스 유무 조건부 버튼 분기 및 고유 ID 부여)
 function renderOutList(list) {
     const tbody = document.querySelector('#outHistoryTable tbody');
     tbody.innerHTML = '';
@@ -385,7 +291,6 @@ function renderOutList(list) {
             : `<span style="margin-left:8px; color:#999; font-size:11px; font-style:italic;">[취소불가]</span>`;
 
         const tr = document.createElement('tr');
-        // 🟢 실시간 삭제 처리를 위해 tr 엘리먼트에 고유 ID 할당
         if (item.id) tr.id = `row-out-${item.id}`;
 
         tr.innerHTML = `
@@ -402,54 +307,39 @@ function renderOutList(list) {
     });
 }
 
-// 📌 신청 내역 원본 삭제 처리 함수 (실시간 DOM 제거 기능 반영)
+// 📌 REST API v1: 취소/삭제 대행 (DELETE 방식, 실시간 UI 제거 적용)
 async function deleteApplication(type, id) {
     if (!id || id === 'undefined' || id === '') {
         alert("이 항목은 학교 시스템상 이미 확정되어 원격 취소/삭제가 불가능합니다.");
         return;
     }
-    
     if (!confirm("정말 이 신청 내역을 원본 기숙사 사이트에서 취소/삭제하시겠습니까?")) return;
 
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     try {
-        const res = await fetch(`${BACKEND_API_URL}/api/delete-application`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': SASADOMI_API_KEY
-            },
-            body: JSON.stringify({
-                studentId: currentStudentId,
-                token: activeToken,
-                type: type,        
-                del_items: id      
-            })
+        const res = await fetch(`${BACKEND_API_URL}/v1/applications/${type}/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
+            body: JSON.stringify({ studentId: currentStudentId, token: activeToken })
         });
 
         const data = await res.json();
         if (data.success) {
             alert('신청 항목이 성공적으로 삭제/취소 처리되었습니다.');
             
-            // 🟢 [낙관적 업데이트] 서버 성공 응답 즉시 화면(DOM)에서 해당 로우 element 탐색 후 바로 삭제
+            // 🟢 [낙관적 업데이트] 화면에서 해당 줄 바로 삭제
             const rowElement = document.getElementById(`row-${type}-${id}`);
-            if (rowElement) {
-                rowElement.remove();
-            }
+            if (rowElement) rowElement.remove();
 
-            // 🟢 삭제 후 테이블 내부 요소가 전부 사라졌다면 "내역이 없습니다" 안내 렌더링
             const tableId = type === 'study' ? '#studyHistoryTable tbody' : '#outHistoryTable tbody';
             const tbody = document.querySelector(tableId);
             if (tbody && tbody.children.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
             }
 
-            // 🟢 학교 서버의 DB 물리 반영 속도를 배려하여 1초(1000ms)의 여유를 두고 백그라운드 갱신 진행
-            setTimeout(() => {
-                fetchApplications(currentStudentId, activeToken);
-            }, 1000);
-
+            // DB 싱크를 맞추기 위해 1초 뒤 조용히 백그라운드 새로고침
+            setTimeout(() => { fetchApplications(currentStudentId, activeToken); }, 1000);
         } else {
             alert(data.message || '삭제 실패');
         }
