@@ -5,7 +5,7 @@ const BACKEND_API_URL = 'https://sasadomi-system.vercel.app';
 const SASADOMI_API_KEY = '1MANmgyI4BbFbN2vq95K'; 
 
 let currentStudentId = '';
-let currentSessionToken = ''; // 🟢 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수 추가
+let currentSessionToken = ''; // 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수
 
 // 📌 페이지 로드 시 토큰 기반 자동 로그인 시도
 window.addEventListener('DOMContentLoaded', () => {
@@ -35,9 +35,8 @@ async function autoLogin(token) {
         
         if (data.success) {
             currentStudentId = data.studentId;
-            currentSessionToken = token; // 🟢 자동 로그인 성공 시 토큰을 전역 변수에 저장
+            currentSessionToken = token;
             
-            // 자동 로그인 성공 시 로그인 폼 영역을 확실하게 숨김
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
@@ -50,15 +49,26 @@ async function autoLogin(token) {
     }
 }
 
-// 계정 연동 및 데이터 패치 (최초 로그인)
+// 📌 계정 연동 및 데이터 패치 (최초 로그인) - 학번 자동 파싱 로직 적용
 async function syncAccount() {
-    const studentId = document.getElementById('studentId').value;
+    const rawStudentId = document.getElementById('studentId').value;
     const studentPw = document.getElementById('studentPw').value;
-    const grade = document.getElementById('grade').value;
-    const sclass = document.getElementById('sclass').value;
-    const number = document.getElementById('number').value;
 
-    if (!studentId || !studentPw) return alert('아이디와 패스워드를 적어주세요.');
+    if (!rawStudentId || !studentPw) return alert('아이디와 패스워드를 적어주세요.');
+
+    // 🟢 입력값 정리 및 소문자 변환
+    const studentId = rawStudentId.trim().toLowerCase();
+
+    // 🟢 아이디 양식 검증 (길이가 11자리이고 's'로 시작하는지)
+    if (studentId.length !== 11 || !studentId.startsWith('s')) {
+        return alert('올바른 학번 양식(s년도학년반번호)으로 입력해 주세요.\n예: s2026030601');
+    }
+
+    // 🟢 아이디 문자열 슬라이싱 및 앞자리 0 제거 파싱
+    // 예: 's2026030601' -> grade: '3', sclass: '6', number: '1'
+    const grade = parseInt(studentId.substring(5, 7), 10).toString();
+    const sclass = parseInt(studentId.substring(7, 9), 10).toString();
+    const number = parseInt(studentId.substring(9, 11), 10).toString();
 
     try {
         const res = await fetch(`${BACKEND_API_URL}/api/login-and-fetch`, {
@@ -67,6 +77,7 @@ async function syncAccount() {
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
             },
+            // 파싱한 데이터(grade, sclass, number)를 함께 백엔드로 전송
             body: JSON.stringify({ studentId, studentPw, grade, sclass, number })
         });
 
@@ -74,7 +85,7 @@ async function syncAccount() {
         
         if (data.success) {
             currentStudentId = studentId;
-            currentSessionToken = data.sessionToken; // 🟢 체크박스 여부와 관계없이 토큰은 무조건 전역 변수에 확보!
+            currentSessionToken = data.sessionToken;
 
             if (document.getElementById('rememberMe') && document.getElementById('rememberMe').checked) {
                 localStorage.setItem('sasa_sessionToken', data.sessionToken);
@@ -82,7 +93,6 @@ async function syncAccount() {
                 clearSession();
             }
 
-            // 최초 로그인 성공 시에도 로그인 폼 영역을 확실하게 숨김
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
@@ -119,7 +129,6 @@ function renderDashboard(data) {
         </tr>`;
     });
 
-    // 대시보드 켜기
     document.getElementById('dashboard').style.display = 'block';
 }
 
@@ -149,12 +158,11 @@ async function submitStudy() {
     const dateObj = new Date(rawDate + 'T00:00:00');
     const timestampSeconds = Math.floor(dateObj.getTime() / 1000);
 
-    // 🟢 로컬 스토리지에 토큰이 없더라도 전역 변수(메모리)에 보관된 토큰을 가져옴
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     const payload = {
         studentId: currentStudentId,
-        token: activeToken, // 🟢 안전하게 확보한 토큰 전송
+        token: activeToken,
         date: timestampSeconds,
         time: time,
         place: place
@@ -203,7 +211,6 @@ async function submitOut() {
     const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
     const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
 
-    // 🟢 로컬 스토리지에 토큰이 없더라도 전역 변수(메모리)에 보관된 토큰을 가져옴
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     try {
@@ -215,7 +222,7 @@ async function submitOut() {
             },
             body: JSON.stringify({
                 studentId: currentStudentId,
-                token: activeToken, // 🟢 안전하게 확보한 토큰 전송
+                token: activeToken,
                 type: outType,
                 reason: outReason,
                 bdate: bdateSec,
@@ -261,17 +268,15 @@ async function disconnectAccount() {
             
             clearSession();
             currentStudentId = '';
-            currentSessionToken = ''; // 🟢 연동 해제 시 메모리 토큰도 완전 초기화
+            currentSessionToken = '';
             document.getElementById('dashboard').style.display = 'none';
             
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'block';
 
+            // 학년, 반, 번호 input 초기화 코드는 삭제됨 (id, pw만 초기화)
             document.getElementById('studentId').value = '';
             document.getElementById('studentPw').value = '';
-            document.getElementById('grade').value = '';
-            document.getElementById('sclass').value = '';
-            document.getElementById('number').value = '';
             if (document.getElementById('rememberMe')) document.getElementById('rememberMe').checked = false;
             
             document.getElementById('rewardView').innerText = '0';
