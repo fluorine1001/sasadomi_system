@@ -296,7 +296,7 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         const rawPassword = decrypt(userData.encryptedPw);
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
-        // 1. 자율학습 신청 내역 파싱
+        // 1. 자율학습 신청 내역 파싱 (체크박스 예외 대응 추가)
         const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/list.php`);
         const $study = cheerio.load(studyRes.data);
         const studyList = [];
@@ -304,6 +304,7 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         $study('table.table.table-hover tbody tr').each((i, el) => {
             const tds = $study(el).find('td');
             if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
+                // 체크박스가 없는 경우를 대비해 기본값 빈 문자열 설정
                 const id = tds.eq(0).find('input[type=checkbox]').val() || '';
                 studyList.push({
                     id: id,
@@ -316,7 +317,7 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
             }
         });
 
-        // 2. 외출/외박 신청 내역 파싱
+        // 2. 외출/외박 신청 내역 파싱 (체크박스 부재 조건 완벽 분기)
         const outRes = await client.get(`${SCHOOL_BASE_URL}/out/list.php`);
         const $out = cheerio.load(outRes.data);
         const outList = [];
@@ -324,17 +325,17 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         $out('table.table.table-hover tbody tr').each((i, el) => {
             const tds = $out(el).find('td');
             if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
+                // 🟢 체크박스(input[name=itemCheck])가 없을 경우 val()은 undefined가 되므로 '' 할당
                 const id = tds.eq(0).find('input[name=itemCheck]').val() || '';
                 const type = tds.eq(2).text().trim();
-                const timeText = tds.eq(3).text().replace(/\s+/g, ' ').trim(); // 연속 공백 및 특수공백 제거
+                const timeText = tds.eq(3).text().replace(/\s+/g, ' ').trim(); 
                 
-                // "시작시간 - 종료시간" 분리 매칭
                 const timeParts = timeText.split('-').map(t => t.trim());
                 const outDate = timeParts[0] || '';
                 const inDate = timeParts[1] || '';
 
                 outList.push({
-                    id: id,
+                    id: id, // 삭제 불가능한 항목은 id가 ''로 들어감
                     type: type,
                     reason: tds.eq(4).text().trim(),
                     outDate: outDate,
@@ -355,6 +356,7 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
 app.post('/api/delete-application', verifyApiKey, async (req, res) => {
     const { studentId, token, type, del_items } = req.body;
     if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
+    if (!del_items) return res.status(400).json({ success: false, message: '삭제할 항목의 고유 ID가 누락되었습니다.' });
 
     try {
         const sessionDoc = await db.collection('sessions').doc(token).get();
@@ -369,7 +371,6 @@ app.post('/api/delete-application', verifyApiKey, async (req, res) => {
         const rawPassword = decrypt(userData.encryptedPw);
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
-        // 자율학습(study)과 외출/외박(out)의 처리 액션 주소 분기
         const actionUrl = type === 'out' 
             ? `${SCHOOL_BASE_URL}/Lib/school_out.action.php` 
             : `${SCHOOL_BASE_URL}/Lib/study_apply.action.php`;
@@ -389,7 +390,7 @@ app.post('/api/delete-application', verifyApiKey, async (req, res) => {
             return res.status(403).json({ success: false, message: '권한이 없습니다.' });
         }
         if (responseText.includes('CHANGED_STATE_EXIST')) {
-            return res.status(400).json({ success: false, message: '관리자가 승인 또는 거절한 항목이 포함되어 있어 삭제할 수 없습니다.' });
+            return res.status(400).json({ success: false, message: '관리자가 이미 처리(승인/거절)하여 복구 또는 삭제할 수 없는 상태입니다.' });
         }
         if (responseText.includes('실패')) {
             return res.status(400).json({ success: false, message: '삭제 처리에 실패했습니다.' });
