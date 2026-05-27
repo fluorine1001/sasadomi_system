@@ -6,7 +6,9 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
     "firebase-admin": "^13.10.0",
+    "node-cache": "^5.1.2",
     "tough-cookie": "^6.0.1"
   }
 }
