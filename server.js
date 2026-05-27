@@ -75,7 +75,7 @@ function decrypt(text) {
     let encryptedText = Buffer.from(textParts.join(':'), 'hex');
     let decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
     let decrypted = decipher.update(encryptedText);
-    rounded = Buffer.concat([decrypted, decipher.final()]);
+    decrypted = Buffer.concat([decrypted, decipher.final()]); // ✨ decrypted로 정상 수정
     return decrypted.toString();
 }
 
