@@ -68,7 +68,6 @@ async function syncAccount() {
     }
 
     // 🟢 아이디 문자열 슬라이싱 및 앞자리 0 제거 파싱
-    // 예: 's2026030601' -> grade: '3', sclass: '6', number: '1'
     const grade = parseInt(studentId.substring(5, 7), 10).toString();
     const sclass = parseInt(studentId.substring(7, 9), 10).toString();
     const number = parseInt(studentId.substring(9, 11), 10).toString();
@@ -80,7 +79,6 @@ async function syncAccount() {
                 'Content-Type': 'application/json',
                 'x-api-key': SASADOMI_API_KEY 
             },
-            // 파싱한 데이터(grade, sclass, number)를 함께 백엔드로 전송
             body: JSON.stringify({ studentId, studentPw, grade, sclass, number })
         });
 
@@ -196,7 +194,7 @@ async function submitStudy() {
             alert('자율학습 신청 대행 요청이 처리되었습니다!');
             closeModal('studyModal');
             
-            // 🟢 신청 완료 후 내역 테이블 최신화
+            // 신청 완료 후 내역 테이블 최신화
             fetchApplications(currentStudentId, activeToken);
         } else {
             alert(data.message || '신청 실패');
@@ -245,7 +243,7 @@ async function submitOut() {
             alert('외출/외박 신청 연동 처리가 수락되었습니다.');
             closeModal('outModal');
             
-            // 🟢 신청 완료 후 내역 테이블 최신화
+            // 신청 완료 후 내역 테이블 최신화
             fetchApplications(currentStudentId, activeToken);
         } else {
             alert(data.message || '신청 실패');
@@ -295,7 +293,6 @@ async function disconnectAccount() {
             document.getElementById('penaltyView').innerText = '0';
             document.querySelector('#historyTable tbody').innerHTML = '';
             
-            // 🟢 연동 해제 시 신청 내역 테이블도 초기화
             document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
             document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
             
@@ -310,7 +307,6 @@ async function disconnectAccount() {
     }
 }
 
-// 모달 제어 유틸리티
 function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
@@ -340,7 +336,7 @@ async function fetchApplications(studentId, token) {
     }
 }
 
-// 📌 자율학습 리스트 렌더링
+// 📌 자율학습 리스트 렌더링 (체크박스 유무 조건부 버튼 분기)
 function renderStudyList(list) {
     const tbody = document.querySelector('#studyHistoryTable tbody');
     tbody.innerHTML = '';
@@ -351,6 +347,11 @@ function renderStudyList(list) {
     }
     
     list.forEach(item => {
+        // 🟢 ID가 있는 경우에만 삭제 버튼 생성, 없는 경우 취소불가 안내문 제공
+        const actionHtml = item.id 
+            ? `<button onclick="deleteApplication('study', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>`
+            : `<span style="margin-left:8px; color:#aaa; font-size:11px; font-weight:normal;">[변경불가]</span>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${item.date}</td>
@@ -359,14 +360,14 @@ function renderStudyList(list) {
             <td>${item.detail || '없음'}</td>
             <td>
                 <span class="status-badge">${item.status}</span>
-                <button onclick="deleteApplication('study', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>
+                ${actionHtml}
             </td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-// 📌 외출/외박 리스트 렌더링
+// 📌 외출/외박 리스트 렌더링 (체크박스 유무 조건부 버튼 분기)
 function renderOutList(list) {
     const tbody = document.querySelector('#outHistoryTable tbody');
     tbody.innerHTML = '';
@@ -377,6 +378,11 @@ function renderOutList(list) {
     }
     
     list.forEach(item => {
+        // 🟢 기숙사 웹사이트에 체크박스가 없어 ID가 비어('') 들어온 경우 삭제 버튼 숨김 처리
+        const actionHtml = item.id 
+            ? `<button onclick="deleteApplication('out', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>`
+            : `<span style="margin-left:8px; color:#999; font-size:11px; font-style:italic;">[취소불가]</span>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><strong>${item.type}</strong></td>
@@ -385,17 +391,18 @@ function renderOutList(list) {
             <td>${item.inDate}</td>
             <td>
                 <span class="status-badge">${item.status}</span>
-                <button onclick="deleteApplication('out', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>
+                ${actionHtml}
             </td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-// 📌 [삭제 프로토콜 전송 함수] 원본 취소 연동 완전 구현
+// 📌 신청 내역 원본 삭제 처리 함수
 async function deleteApplication(type, id) {
+    // 혹시 모를 프론트 단 이중 방어막 예외 처리
     if (!id || id === 'undefined' || id === '') {
-        alert("삭제 처리를 위한 기숙사 고유 식별자(ID)가 제공되지 않았습니다.\n이미 관리자가 승인했거나 비정상적인 접근입니다.");
+        alert("이 항목은 학교 시스템상 이미 확정되어 원격 취소/삭제가 불가능합니다.");
         return;
     }
     
@@ -413,15 +420,14 @@ async function deleteApplication(type, id) {
             body: JSON.stringify({
                 studentId: currentStudentId,
                 token: activeToken,
-                type: type,        // 'study' 또는 'out' 분기 신호
-                del_items: id      // 원본 서버의 바디 규격명 매칭 데이터 전달
+                type: type,        
+                del_items: id      
             })
         });
 
         const data = await res.json();
         if (data.success) {
             alert('신청 항목이 성공적으로 삭제/취소 처리되었습니다.');
-            // 목록 새로고침
             fetchApplications(currentStudentId, activeToken);
         } else {
             alert(data.message || '삭제 실패');
