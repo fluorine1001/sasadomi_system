@@ -27,15 +27,19 @@ async function syncAccount() {
             document.getElementById('rewardView').innerText = data.totalReward;
             document.getElementById('penaltyView').innerText = data.totalPenalty;
 
-            // 💡 수정됨: 상점 리스트와 벌점 리스트를 하나의 배열로 합치기
-            const combinedList = [...(data.rewardList || []), ...(data.penaltyList || [])];
+            // 💡 수정됨: 상점과 벌점을 각각 구분할 수 있도록 태그(type)를 맵핑한 후 합칩니다.
+            const rewards = (data.rewardList || []).map(item => ({ ...item, type: '상점', color: '#1890ff' }));
+            const penalties = (data.penaltyList || []).map(item => ({ ...item, type: '벌점', color: '#ff4d4f' }));
+            const combinedList = [...rewards, ...penalties];
 
             // 테이블 리스트 렌더링
             const tbody = document.querySelector('#historyTable tbody');
             tbody.innerHTML = '';
             
             combinedList.forEach(item => {
+                // 💡 수정됨: '구분' 칸이 추가되었고 상/벌점에 따라 색상이 다르게 적용됩니다.
                 tbody.innerHTML += `<tr>
+                    <td style="color: ${item.color}; font-weight: bold;">${item.type}</td>
                     <td>${item.score}</td>
                     <td>${item.weight}</td>
                     <td>${item.reason}</td>
@@ -72,7 +76,6 @@ async function submitStudy() {
     
     if (!rawDate) return alert('날짜를 지정해 주세요.');
     
-    // 학교 기준 타임스탬프 계산 (KST 기준 해당 일의 00시 00분 00초 타임스탬프 반환)
     const dateObj = new Date(rawDate + 'T00:00:00');
     const timestampSeconds = Math.floor(dateObj.getTime() / 1000);
 
@@ -83,7 +86,6 @@ async function submitStudy() {
         place: place
     };
 
-    // 본관 전용 세부 항목 추가 조건문
     if (place === '3') {
         payload.detail = document.getElementById('studyDetail').value;
         payload.detail_reason = document.getElementById('studyDetailReason').value;
@@ -121,7 +123,6 @@ async function submitOut() {
 
     if (!bDateInput || !eDateInput || !outReason) return alert('필수 항목을 빠짐없이 기입해 주세요.');
 
-    // 유닉스 타임스탬프 역산 계산식 적용 (초 단위)
     const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
     const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
 
@@ -155,7 +156,6 @@ async function submitOut() {
 async function disconnectAccount() {
     if (!currentStudentId) return alert('현재 연동된 계정이 없습니다.');
     
-    // 실수로 누르는 것을 방지하기 위한 확인 창
     if (!confirm('정말 계정 연동을 해제하시겠습니까?\n저장된 비밀번호와 자동 로그인 정보가 즉시 삭제됩니다.')) return;
 
     try {
@@ -170,11 +170,23 @@ async function disconnectAccount() {
         if (data.success) {
             alert('계정 연동이 안전하게 해제되었습니다.');
             
-            // 데이터 초기화 및 대시보드 숨기기
+            // 💡 수정됨: 연동 해제 즉시 UI를 완벽하게 숨기고 내부 잔여 데이터를 전부 지웁니다.
             currentStudentId = '';
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('studentId').value = '';
             document.getElementById('studentPw').value = '';
+            document.getElementById('grade').value = '';
+            document.getElementById('sclass').value = '';
+            document.getElementById('number').value = '';
+            
+            // 데이터 텍스트 및 테이블 초기화 (보안 강화)
+            document.getElementById('rewardView').innerText = '0';
+            document.getElementById('penaltyView').innerText = '0';
+            document.querySelector('#historyTable tbody').innerHTML = '';
+            
+            // 혹시 열려있을지 모를 모달도 닫기
+            closeModal('studyModal');
+            closeModal('outModal');
         } else {
             alert(data.message || '연동 해제 실패');
         }
