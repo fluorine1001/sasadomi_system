@@ -96,7 +96,6 @@ async function getAuthenticatedSession(studentId, rawPassword) {
 function parseTable(html) {
     const $ = cheerio.load(html);
     const list = [];
-    // 상벌점 테이블 파싱 안정성을 위해 tbody 선택자 제거 가능성 열어둠
     $('table.table-hover tr').each((index, element) => {
         const tds = $(element).find('td');
         if (tds.length >= 4) {
@@ -211,9 +210,7 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             validateStatus: () => true 
         });
 
-        const responseText = typeof response.data === 'string' 
-            ? response.data 
-            : JSON.stringify(response.data);
+        const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
 
         if (responseText.includes('history.back') || responseText.includes('alert(') || responseText.includes('실패')) {
             return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다. (이미 신청됨 혹은 신청 기간 아님)' });
@@ -255,9 +252,7 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             validateStatus: () => true
         });
 
-        const responseText = typeof response.data === 'string' 
-            ? response.data 
-            : JSON.stringify(response.data);
+        const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
 
         if (responseText.includes('history.back') || responseText.includes('alert(') || responseText.includes('실패')) {
             return res.status(400).json({ success: false, message: '학교 시스템에서 외출 처리를 거부했습니다.' });
@@ -302,39 +297,49 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
         // 1. 자율학습 신청 내역 파싱
-        const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/apply.php`);
+        const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/list.php`);
         const $study = cheerio.load(studyRes.data);
         const studyList = [];
         
-        // 브라우저 보정 버그를 유발하는 tbody 제거 및 데이터 안전 정제 적용
-        $study('table tr').each((i, el) => {
+        $study('table.table.table-hover tbody tr').each((i, el) => {
             const tds = $study(el).find('td');
-            if (tds.length > 0 && !tds.eq(0).text().includes('없습니다')) {
+            if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
+                const id = tds.eq(0).find('input[type=checkbox]').val() || '';
                 studyList.push({
-                    date: tds.eq(0).text().trim(),
-                    time: tds.eq(1).text().trim(),
-                    place: tds.eq(2).text().trim(),
-                    detail: tds.eq(3).text().trim(),
-                    status: tds.last().text().trim().replace(/\s+/g, ' ')
+                    id: id,
+                    date: tds.eq(2).text().trim(),
+                    time: tds.eq(3).text().trim(),
+                    place: tds.eq(4).text().trim(),
+                    detail: tds.eq(5).text().trim(),
+                    status: tds.last().text().trim() || '대기'
                 });
             }
         });
 
         // 2. 외출/외박 신청 내역 파싱
-        const outRes = await client.get(`${SCHOOL_BASE_URL}/school_out/apply.php`);
+        const outRes = await client.get(`${SCHOOL_BASE_URL}/out/list.php`);
         const $out = cheerio.load(outRes.data);
         const outList = [];
         
-        // 동일하게 tbody 제거 및 안전 정제 적용
-        $out('table tr').each((i, el) => {
+        $out('table.table.table-hover tbody tr').each((i, el) => {
             const tds = $out(el).find('td');
-            if (tds.length > 0 && !tds.eq(0).text().includes('없습니다')) {
+            if (tds.length >= 7 && !tds.eq(0).text().includes('없습니다')) {
+                const id = tds.eq(0).find('input[name=itemCheck]').val() || '';
+                const type = tds.eq(2).text().trim();
+                const timeText = tds.eq(3).text().replace(/\s+/g, ' ').trim(); // 연속 공백 및 특수공백 제거
+                
+                // "시작시간 - 종료시간" 분리 매칭
+                const timeParts = timeText.split('-').map(t => t.trim());
+                const outDate = timeParts[0] || '';
+                const inDate = timeParts[1] || '';
+
                 outList.push({
-                    type: tds.eq(0).text().trim(),
-                    reason: tds.eq(1).text().trim(),
-                    outDate: tds.eq(2).text().trim(),
-                    inDate: tds.eq(3).text().trim(),
-                    status: tds.last().text().trim().replace(/\s+/g, ' ')
+                    id: id,
+                    type: type,
+                    reason: tds.eq(4).text().trim(),
+                    outDate: outDate,
+                    inDate: inDate,
+                    status: tds.eq(6).text().trim() || '대기'
                 });
             }
         });
@@ -343,6 +348,57 @@ app.post('/api/fetch-applications', verifyApiKey, async (req, res) => {
     } catch (error) {
         console.error("내역 조회 에러:", error);
         res.status(500).json({ success: false, message: `내역 조회 중 서버 에러: ${error.message}` });
+    }
+});
+
+// [API 6] 신청 내역 원본 삭제/취소 대행
+app.post('/api/delete-application', verifyApiKey, async (req, res) => {
+    const { studentId, token, type, del_items } = req.body;
+    if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
+
+    try {
+        const sessionDoc = await db.collection('sessions').doc(token).get();
+        if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
+            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
+        }
+
+        const userDoc = await db.collection('users').doc(studentId).get();
+        if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
+        
+        const userData = userDoc.data();
+        const rawPassword = decrypt(userData.encryptedPw);
+        const client = await getAuthenticatedSession(studentId, rawPassword);
+
+        // 자율학습(study)과 외출/외박(out)의 처리 액션 주소 분기
+        const actionUrl = type === 'out' 
+            ? `${SCHOOL_BASE_URL}/Lib/school_out.action.php` 
+            : `${SCHOOL_BASE_URL}/Lib/study_apply.action.php`;
+
+        const params = new URLSearchParams({
+            mode: 'apply_del',
+            del_items: del_items
+        });
+
+        const response = await client.post(actionUrl, params.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+
+        if (responseText.includes('PERM_ERR')) {
+            return res.status(403).json({ success: false, message: '권한이 없습니다.' });
+        }
+        if (responseText.includes('CHANGED_STATE_EXIST')) {
+            return res.status(400).json({ success: false, message: '관리자가 승인 또는 거절한 항목이 포함되어 있어 삭제할 수 없습니다.' });
+        }
+        if (responseText.includes('실패')) {
+            return res.status(400).json({ success: false, message: '삭제 처리에 실패했습니다.' });
+        }
+
+        res.json({ success: true, message: '정상적으로 취소/삭제되었습니다.' });
+    } catch (error) {
+        console.error("삭제 위임 에러:", error);
+        res.status(500).json({ success: false, message: `삭제 처리 중 내부 오류: ${error.message}` });
     }
 });
 
