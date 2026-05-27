@@ -6,16 +6,17 @@ import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import 'dotenv/config'; // require('dotenv').config() 대용
+import 'dotenv/config';
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// 🟢 서버가 잘 살아있는지 브라우저에서 바로 확인할 수 있는 헬스 체크 주소
-app.get('/', (req, res) => {
-    res.send('🚀 Sasadomi System Backend is running perfectly in ESM mode!');
-});
+// 🟢 [변경] 모든 도메인 및 외부 클라이언트에서 이 API를 호출할 수 있도록 CORS 전면 개방
+app.use(cors({
+    origin: '*',
+    methods: ['POST', 'GET', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-api-key'] // x-api-key 헤더 허용
+}));
+app.use(express.json());
 
 // 1. Firebase Admin 초기화
 if (!admin.apps.length) {
@@ -28,6 +29,35 @@ if (!admin.apps.length) {
     });
 }
 const db = admin.firestore();
+
+// 🟢 [신규] 외부 개발자 인증을 위한 API Key 검증 미들웨어
+const verifyApiKey = async (req, res, next) => {
+    // OPTIONS(CORS 예비 요청)는 인증을 건너뜁니다.
+    if (req.method === 'OPTIONS') return next();
+
+    const apiKey = req.headers['x-api-key'];
+    
+    if (!apiKey) {
+        return res.status(401).json({ success: false, message: 'API Key (x-api-key)가 헤더에 누락되었습니다.' });
+    }
+
+    try {
+        // Firebase의 api_keys 컬렉션에서 해당 키가 존재하는지 확인
+        const keyDoc = await db.collection('api_keys').doc(apiKey).get();
+        if (!keyDoc.exists) {
+            return res.status(403).json({ success: false, message: '등록되지 않았거나 유효하지 않은 API Key입니다.' });
+        }
+        next(); // 인증 통과 시 다음 로직 실행
+    } catch (error) {
+        console.error('API Key 검증 오류:', error);
+        return res.status(500).json({ success: false, message: '인증 서버 오류' });
+    }
+};
+
+// 기본 주소 접속 시 서버 상태 확인 (인증 제외)
+app.get('/', (req, res) => {
+    res.send('🚀 Sasadomi System Public API Hub is running perfectly!');
+});
 
 // 2. 비밀번호 암호화/복호화 설정 (AES-256-CBC)
 const ENCRYPTION_KEY = process.env.SECRET_KEY || 'a'.repeat(32); 
@@ -51,12 +81,9 @@ function decrypt(text) {
     return decrypted.toString();
 }
 
-// 🏫 학교 사이트 베이스 주소 정의
 const SCHOOL_BASE_URL = 'https://sasadomi.hs.kr';
 
-// 공통 함수: 학교 세션 로그인 후 Axios 인스턴스 반환
 async function getAuthenticatedSession(studentId, rawPassword) {
-    // 유저별로 독립된 쿠키 바구니 생성 (쿠키 꼬임 방지)
     const jar = new CookieJar();
     const client = wrapper(axios.create({ jar, withCredentials: true }));
 
@@ -71,7 +98,6 @@ async function getAuthenticatedSession(studentId, rawPassword) {
     return client;
 }
 
-// 공통 함수: HTML에서 표(테이블) 데이터를 배열로 추출
 function parseTable(html) {
     const $ = cheerio.load(html);
     const list = [];
@@ -89,8 +115,10 @@ function parseTable(html) {
     return list;
 }
 
+// 🟢 아래 핵심 기능들에는 모두 verifyApiKey 미들웨어를 장착하여 보호합니다.
+
 // [API 1] 로그인 정보 저장 및 상벌점 총점/내역 스크래핑
-app.post('/api/login-and-fetch', async (req, res) => {
+app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
     const { studentId, studentPw, grade, sclass, number } = req.body;
 
     try {
@@ -106,7 +134,6 @@ app.post('/api/login-and-fetch', async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        // 고유 세션 토큰 생성 및 DB 저장
         const sessionToken = crypto.randomUUID();
         await db.collection('sessions').doc(sessionToken).set({
             studentId: studentId,
@@ -140,8 +167,8 @@ app.post('/api/login-and-fetch', async (req, res) => {
     }
 });
 
-// 📌 [새로운 API] 토큰을 이용한 자동 로그인
-app.post('/api/auto-login', async (req, res) => {
+// [API] 토큰을 이용한 자동 로그인
+app.post('/api/auto-login', verifyApiKey, async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ success: false, message: '토큰 없음' });
 
@@ -187,7 +214,7 @@ app.post('/api/auto-login', async (req, res) => {
 });
 
 // [API 2] 자율학습 신청 대행
-app.post('/api/apply-study', async (req, res) => {
+app.post('/api/apply-study', verifyApiKey, async (req, res) => {
     const { studentId, date, time, place, detail, detail_reason } = req.body;
 
     try {
@@ -224,7 +251,7 @@ app.post('/api/apply-study', async (req, res) => {
 });
 
 // [API 3] 외출/외박 신청 대행
-app.post('/api/apply-out', async (req, res) => {
+app.post('/api/apply-out', verifyApiKey, async (req, res) => {
     const { studentId, type, reason, bdate, edate } = req.body;
 
     try {
@@ -259,7 +286,7 @@ app.post('/api/apply-out', async (req, res) => {
 });
 
 // [API 4] 계정 연동 해제
-app.post('/api/disconnect', async (req, res) => {
+app.post('/api/disconnect', verifyApiKey, async (req, res) => {
     const { studentId, token } = req.body;
 
     if (!studentId) {
@@ -288,4 +315,4 @@ app.post('/api/disconnect', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`서버 작동 중 :: 포트 ${PORT}`));
+app.listen(PORT, () => console.log(`공용 오픈 API 서버 작동 중 :: 포트 ${PORT}`));
