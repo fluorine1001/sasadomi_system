@@ -12,6 +12,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🟢 새롭게 추가할 부분: 기본 주소 접속 시 인사말 출력 (서버 헬스 체크용)
+app.get('/', (req, res) => {
+    res.send('🚀 Sasadomi System Backend is running perfectly!');
+});
+
 // 1. Firebase Admin 초기화
 if (!admin.apps.length) {
     admin.initializeApp({
