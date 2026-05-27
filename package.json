@@ -10,6 +10,8 @@
     "express-rate-limit": "^8.5.2",
     "firebase-admin": "^13.10.0",
     "node-cache": "^5.1.2",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
     "tough-cookie": "^6.0.1"
   },
   "overrides": {
