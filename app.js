@@ -41,6 +41,9 @@ async function autoLogin(token) {
             if (loginForm) loginForm.style.display = 'none';
 
             renderDashboard(data);
+            
+            // 🟢 자동 로그인 성공 시 신청 내역 불러오기 추가
+            fetchApplications(currentStudentId, currentSessionToken);
         } else {
             clearSession();
         }
@@ -97,6 +100,10 @@ async function syncAccount() {
             if (loginForm) loginForm.style.display = 'none';
 
             renderDashboard(data);
+            
+            // 🟢 계정 연동(로그인) 성공 시 신청 내역 불러오기 추가
+            fetchApplications(currentStudentId, currentSessionToken);
+            
             alert('성공적으로 계정이 연동 및 최신 데이터 동기화 완료되었습니다.');
         } else {
             alert(data.message || '인증 실패');
@@ -188,6 +195,9 @@ async function submitStudy() {
         if (data.success) {
             alert('자율학습 신청 대행 요청이 처리되었습니다!');
             closeModal('studyModal');
+            
+            // 🟢 신청 완료 후 내역 테이블 최신화
+            fetchApplications(currentStudentId, activeToken);
         } else {
             alert(data.message || '신청 실패');
         }
@@ -234,6 +244,9 @@ async function submitOut() {
         if (data.success) {
             alert('외출/외박 신청 연동 처리가 수락되었습니다.');
             closeModal('outModal');
+            
+            // 🟢 신청 완료 후 내역 테이블 최신화
+            fetchApplications(currentStudentId, activeToken);
         } else {
             alert(data.message || '신청 실패');
         }
@@ -282,6 +295,10 @@ async function disconnectAccount() {
             document.getElementById('penaltyView').innerText = '0';
             document.querySelector('#historyTable tbody').innerHTML = '';
             
+            // 🟢 연동 해제 시 신청 내역 테이블도 초기화
+            document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            
             closeModal('studyModal');
             closeModal('outModal');
         } else {
@@ -296,3 +313,73 @@ async function disconnectAccount() {
 // 모달 제어 유틸리티
 function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+
+// 📌 [신규 추가됨] 신청 내역 API 통신 및 렌더링 로직
+async function fetchApplications(studentId, token) {
+    try {
+        const res = await fetch(`${BACKEND_API_URL}/api/fetch-applications`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': SASADOMI_API_KEY
+            },
+            body: JSON.stringify({ studentId, token })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            renderStudyList(data.studyList);
+            renderOutList(data.outList);
+        } else {
+            console.error("신청 내역 조회 실패:", data.message);
+        }
+    } catch (error) {
+        console.error("신청 내역 통신 오류:", error);
+    }
+}
+
+function renderStudyList(list) {
+    const tbody = document.querySelector('#studyHistoryTable tbody');
+    tbody.innerHTML = '';
+    
+    if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        return;
+    }
+    
+    list.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.date}</td>
+            <td>${item.time}</td>
+            <td>${item.place}</td>
+            <td>${item.detail}</td>
+            <td>${item.status}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderOutList(list) {
+    const tbody = document.querySelector('#outHistoryTable tbody');
+    tbody.innerHTML = '';
+    
+    if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        return;
+    }
+    
+    list.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.type}</td>
+            <td>${item.reason}</td>
+            <td>${item.outDate}</td>
+            <td>${item.inDate}</td>
+            <td>${item.status}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
