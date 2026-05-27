@@ -1,0 +1,29 @@
+body { font-family: 'Malgun Gothic', sans-serif; background-color: #f5f6f8; margin: 0; color: #333; }
+.container { max-width: 700px; margin: 40px auto; padding: 20px; }
+h1 { text-align: center; color: #8A1516; }
+.card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+.form-group-row { display: flex; gap: 10px; margin-bottom: 12px; }
+input, select, textarea { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+textarea { width: 100%; height: 80px; resize: none; }
+button { width: 100%; padding: 12px; background: #8A1516; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+button:hover { background: #6F1011; }
+.score-container { display: flex; gap: 15px; margin-bottom: 20px; }
+.score-box { flex: 1; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; border-radius: 6px; color: #fff; }
+.score-box.plus { background-color: #2b579a; }
+.score-box.minus { background-color: #b91d47; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+th { background-color: #f8f9fa; }
+.action-buttons { display: flex; gap: 15px; }
+.btn-main { font-size: 16px; padding: 15px; }
+.btn-out { background-color: #2c3e50; }
+.btn-out:hover { background-color: #1a252f; }
+
+/* 모달 기본 스타일 */
+.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+.modal-content { background: #fff; margin: 10% auto; padding: 25px; width: 85%; max-width: 480px; border-radius: 8px; position: relative; }
+.close { position: absolute; right: 20px; top: 15px; font-size: 28px; cursor: pointer; }
+.modal-body label { display: block; font-weight: bold; margin-top: 12px; margin-bottom: 5px; color: #003366; font-size: 14px;}
+.form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.notice { font-size: 12px; color: #555; margin: 10px 0; }
+.btn-submit { margin-top: 15px; }
