@@ -75,7 +75,7 @@ function decrypt(text) {
     let encryptedText = Buffer.from(textParts.join(':'), 'hex');
     let decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
     let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]); // ✨ decrypted로 정상 수정
+    decrypted = Buffer.concat([decrypted, decipher.final()]); 
     return decrypted.toString();
 }
 
@@ -136,17 +136,20 @@ app.post('/api/login-and-fetch', verifyApiKey, async (req, res) => {
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
+        // 🟢 1. 상점 페이지(tab=1) 크롤링
         const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
         const $reward = cheerio.load(rewardResponse.data);
         
         let rewardText = $reward('#rewordTab p').eq(1).text() || '0';
-        let penaltyText = $reward('#punishmentTab p').eq(1).text() || '0';
-        const totalReward = rewardText.replace(/[^0-9]/g, '');
-        const totalPenalty = penaltyText.replace(/[^0-9]/g, '');
-
+        const totalReward = rewardText.replace(/[^0-9]/g, '') || '0';
         const rewardList = parseTable(rewardResponse.data);
 
+        // 🟢 2. 벌점 페이지(tab=2) 분리 크롤링
         const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
+        const $penalty = cheerio.load(penaltyResponse.data);
+        
+        let penaltyText = $penalty('#punishmentTab p').eq(1).text() || '0';
+        const totalPenalty = penaltyText.replace(/[^0-9]/g, '') || '0';
         const penaltyList = parseTable(penaltyResponse.data);
 
         res.json({ 
@@ -184,15 +187,18 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
 
         const client = await getAuthenticatedSession(studentId, rawPassword);
         
+        // 🟢 1. 상점 페이지(tab=1) 크롤링
         const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
         const $reward = cheerio.load(rewardResponse.data);
         let rewardText = $reward('#rewordTab p').eq(1).text() || '0';
-        let penaltyText = $reward('#punishmentTab p').eq(1).text() || '0';
-        const totalReward = rewardText.replace(/[^0-9]/g, '');
-        const totalPenalty = penaltyText.replace(/[^0-9]/g, '');
-
+        const totalReward = rewardText.replace(/[^0-9]/g, '') || '0';
         const rewardList = parseTable(rewardResponse.data);
+
+        // 🟢 2. 벌점 페이지(tab=2) 분리 크롤링
         const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
+        const $penalty = cheerio.load(penaltyResponse.data);
+        let penaltyText = $penalty('#punishmentTab p').eq(1).text() || '0';
+        const totalPenalty = penaltyText.replace(/[^0-9]/g, '') || '0';
         const penaltyList = parseTable(penaltyResponse.data);
 
         res.json({
@@ -209,18 +215,26 @@ app.post('/api/auto-login', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API 2] 자율학습 신청 대행 (개별 세션 격리 적용)
+// [API 2] 자율학습 신청 대행
 app.post('/api/apply-study', verifyApiKey, async (req, res) => {
     const { studentId, token, date, time, place, detail, detail_reason } = req.body;
 
+    // 🟢 [보안 패치] 토큰 필수 검증 로직
+    if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
+
     try {
+        const sessionDoc = await db.collection('sessions').doc(token).get();
+        // 토큰이 존재하지 않거나, 토큰의 주인이 요청한 학번과 다를 경우 차단 (권한 우회 방어)
+        if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
+            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
+        }
+
         const userDoc = await db.collection('users').doc(studentId).get();
         if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
         
         const userData = userDoc.data();
         const rawPassword = decrypt(userData.encryptedPw);
 
-        // 🟢 로그인 세션 쿠키가 탑재된 독립 client 인스턴스 생성
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
         const params = new URLSearchParams({
@@ -229,17 +243,21 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
             grade: userData.grade,
             class: userData.class,
             class_number: userData.number,
-            date: date,
+            date: date, // 🟢 타임스탬프 형식 유지
             time: time,
             place: place,
             detail: detail || '',
             detail_reason: detail_reason || ''
         });
 
-        // 🟢 전역 axios가 아닌 독립 client 객체로 요청을 전달하여 쿠키 격리
-        await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), {
+        const response = await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
+
+        // 🟢 [논리 패치] 학교 서버 응답 내 에러 스크립트 존재 여부 검사
+        if (response.data.includes('history.back') || response.data.includes('alert(') || response.data.includes('실패')) {
+            return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다. (이미 신청됨 또는 양식 오류)' });
+        }
 
         res.json({ success: true, message: '자율학습 신청 완료' });
     } catch (error) {
@@ -248,18 +266,25 @@ app.post('/api/apply-study', verifyApiKey, async (req, res) => {
     }
 });
 
-// [API 3] 외출/외박 신청 대행 (개별 세션 격리 적용)
+// [API 3] 외출/외박 신청 대행
 app.post('/api/apply-out', verifyApiKey, async (req, res) => {
     const { studentId, token, type, reason, bdate, edate } = req.body;
 
+    // 🟢 [보안 패치] 토큰 필수 검증 로직
+    if (!token) return res.status(401).json({ success: false, message: '인증 토큰이 누락되었습니다.' });
+
     try {
+        const sessionDoc = await db.collection('sessions').doc(token).get();
+        if (!sessionDoc.exists || sessionDoc.data().studentId !== studentId) {
+            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 권한입니다.' });
+        }
+
         const userDoc = await db.collection('users').doc(studentId).get();
         if (!userDoc.exists) return res.status(404).json({ message: '등록된 유저 정보가 없습니다.' });
         
         const userData = userDoc.data();
         const rawPassword = decrypt(userData.encryptedPw);
 
-        // 🟢 로그인 세션 쿠키가 탑재된 독립 client 인스턴스 생성
         const client = await getAuthenticatedSession(studentId, rawPassword);
 
         const params = new URLSearchParams({
@@ -269,14 +294,18 @@ app.post('/api/apply-out', verifyApiKey, async (req, res) => {
             class_number: userData.number,
             type: type,
             reason: reason,
-            bdate: bdate,
+            bdate: bdate, // 🟢 타임스탬프 형식 유지
             edate: edate
         });
 
-        // 🟢 전역 axios가 아닌 독립 client 객체로 요청을 전달하여 쿠키 격리
-        await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), {
+        const response = await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
+
+        // 🟢 [논리 패치] 학교 서버 응답 검사
+        if (response.data.includes('history.back') || response.data.includes('alert(') || response.data.includes('실패')) {
+            return res.status(400).json({ success: false, message: '학교 시스템에서 처리를 거부했습니다.' });
+        }
 
         res.json({ success: true, message: '외출/외박 신청 완료' });
     } catch (error) {
