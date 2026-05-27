@@ -12,7 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 1. Firebase Admin 초기화 (Codespaces 환경변수 연동)
+// 1. Firebase Admin 초기화
 if (!admin.apps.length) {
     admin.initializeApp({
         credential: admin.credential.cert({
@@ -25,7 +25,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // 2. 비밀번호 암호화/복호화 설정 (AES-256-CBC)
-const ENCRYPTION_KEY = process.env.SECRET_KEY || 'a'.repeat(32); // 32바이트 키 필요
+const ENCRYPTION_KEY = process.env.SECRET_KEY || 'a'.repeat(32); 
 const IV_LENGTH = 16;
 
 function encrypt(text) {
@@ -54,7 +54,6 @@ async function getAuthenticatedSession(studentId, rawPassword) {
     const jar = new CookieJar();
     const client = wrapper(axios.create({ jar, withCredentials: true }));
 
-    // 로그인 요청
     await client.post(`${SCHOOL_BASE_URL}/Lib/user.action.php`, new URLSearchParams({
         mode: 'login',
         id: studentId,
@@ -66,7 +65,7 @@ async function getAuthenticatedSession(studentId, rawPassword) {
     return client;
 }
 
-// 공통 함수: HTML에서 표(테이블) 데이터를 배열로 추출하는 함수
+// 공통 함수: HTML에서 표(테이블) 데이터를 배열로 추출
 function parseTable(html) {
     const $ = cheerio.load(html);
     const list = [];
@@ -101,6 +100,13 @@ app.post('/api/login-and-fetch', async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
+        // 💡 추가됨: 고유 세션 토큰 생성 및 DB 저장
+        const sessionToken = crypto.randomUUID();
+        await db.collection('sessions').doc(sessionToken).set({
+            studentId: studentId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
         const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
         const $reward = cheerio.load(rewardResponse.data);
         
@@ -116,6 +122,7 @@ app.post('/api/login-and-fetch', async (req, res) => {
 
         res.json({ 
             success: true, 
+            sessionToken, // 프론트로 토큰 전달
             totalReward, 
             totalPenalty, 
             rewardList, 
@@ -124,6 +131,53 @@ app.post('/api/login-and-fetch', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: '로그인 실패 또는 데이터 파싱 오류' });
+    }
+});
+
+// 📌 [새로운 API] 토큰을 이용한 자동 로그인
+app.post('/api/auto-login', async (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ success: false, message: '토큰 없음' });
+
+    try {
+        const sessionDoc = await db.collection('sessions').doc(token).get();
+        if (!sessionDoc.exists) {
+            return res.status(401).json({ success: false, message: '유효하지 않거나 만료된 세션' });
+        }
+
+        const { studentId } = sessionDoc.data();
+        const userDoc = await db.collection('users').doc(studentId).get();
+        
+        if (!userDoc.exists) return res.status(404).json({ success: false, message: '학생 데이터 없음' });
+
+        const userData = userDoc.data();
+        const rawPassword = decrypt(userData.encryptedPw);
+
+        // 복호화된 비번으로 학교 사이트 접속 후 실시간 데이터 로드
+        const client = await getAuthenticatedSession(studentId, rawPassword);
+        
+        const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
+        const $reward = cheerio.load(rewardResponse.data);
+        let rewardText = $reward('#rewordTab p').eq(1).text() || '0';
+        let penaltyText = $reward('#punishmentTab p').eq(1).text() || '0';
+        const totalReward = rewardText.replace(/[^0-9]/g, '');
+        const totalPenalty = penaltyText.replace(/[^0-9]/g, '');
+
+        const rewardList = parseTable(rewardResponse.data);
+        const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
+        const penaltyList = parseTable(penaltyResponse.data);
+
+        res.json({
+            success: true,
+            studentId,
+            totalReward, 
+            totalPenalty, 
+            rewardList, 
+            penaltyList
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: '자동 로그인 처리 오류' });
     }
 });
 
@@ -199,9 +253,9 @@ app.post('/api/apply-out', async (req, res) => {
     }
 });
 
-// 📌 [API 4] 계정 연동 해제 (Firestore에서 학생 정보 완전 삭제)
+// 📌 [API 4] 계정 연동 해제 (Firestore에서 학생 정보 완전 삭제 및 토큰 파기)
 app.post('/api/disconnect', async (req, res) => {
-    const { studentId } = req.body;
+    const { studentId, token } = req.body;
 
     if (!studentId) {
         return res.status(400).json({ success: false, message: '학번이 필요합니다.' });
@@ -211,13 +265,17 @@ app.post('/api/disconnect', async (req, res) => {
         const userRef = db.collection('users').doc(studentId);
         const doc = await userRef.get();
 
-        // 등록된 정보가 없는 경우 예외 처리
         if (!doc.exists) {
             return res.status(404).json({ success: false, message: '연동된 계정 정보가 존재하지 않습니다.' });
         }
 
-        // DB에서 문서 삭제
+        // DB에서 학생 계정 문서 삭제
         await userRef.delete();
+
+        // 전달받은 세션 토큰이 있다면 DB에서 해당 토큰 무효화(삭제)
+        if (token) {
+            await db.collection('sessions').doc(token).delete();
+        }
 
         res.json({ success: true, message: '계정 연동이 안전하게 해제되었습니다.' });
     } catch (error) {
