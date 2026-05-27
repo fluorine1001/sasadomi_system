@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SASA 기숙사 시스템 통합 대시보드</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🏫 기숙사 통합 관리 서비스</h1>
+        
+        <div class="card card-login">
+            <h2>🔐 학생 계정 동기화 (최초 1회 필수)</h2>
+            <div class="form-group-row">
+                <input type="text" id="studentId" placeholder="아이디/학번">
+                <input type="password" id="studentPw" placeholder="비밀번호">
+            </div>
+            <div class="form-group-row">
+                <input type="number" id="grade" placeholder="학년">
+                <input type="number" id="sclass" placeholder="반">
+                <input type="number" id="number" placeholder="번호">
+            </div>
+            <button onclick="syncAccount()">계정 인증 및 점수 불러오기</button>
+        </div>
+
+        <div id="dashboard" style="display:none;">
+            <div class="score-container">
+                <div class="score-box plus">상점 총점: <span id="rewardView">0</span>점</div>
+                <div class="score-box minus">벌점 총점: <span id="penaltyView">0</span>점</div>
+            </div>
+
+            <div class="card">
+                <h3>📋 상/벌점 세부 내역</h3>
+                <table id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>점수</th>
+                            <th>가중치</th>
+                            <th>사유</th>
+                            <th>날짜</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn-main" onclick="openModal('studyModal')">자율학습 등록</button>
+                <button class="btn-main btn-out" onclick="openModal('outModal')">외출·외박 신청</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="studyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('studyModal')">&times;</span>
+            <h2>자율학습 등록</h2>
+            <div class="modal-body">
+                <label>날짜</label>
+                <input type="date" id="studyDate">
+
+                <div class="form-row">
+                    <div>
+                        <label>시간</label>
+                        <select id="studyTime">
+                            <option value="1">오전</option>
+                            <option value="2">오후</option>
+                            <option value="3">학습 I</option>
+                            <option value="4">학습 II</option>
+                            <option value="5">연장 학습(00~01시)</option>
+                            <option value="6">연장 학습(01~02시)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>장소</label>
+                        <select id="studyPlace" onchange="toggleStudyFields(this.value)">
+                            <option value="1">호실(요양)-주간 평일 3회</option>
+                            <option value="2">휴게실</option>
+                            <option value="3">본관</option>
+                            <option value="4">정독실</option>
+                            <option value="5">세미나공간</option>
+                            <option value="6">3층 스터디룸</option>
+                            <option value="7">소학습실(1층)</option>
+                            <option value="8">소학습실(2층)</option>
+                            <option value="9">소학습실(3층)</option>
+                            <option value="10">소학습실(4층)</option>
+                            <option value="11">소학습실(5층)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <p class="notice">본관 활동 신청은 18:00까지 가능합니다.</p>
+
+                <div id="conditionalStudyFields" style="display: none;">
+                    <label>본관 승인 지도교사를 선택하세요</label>
+                    <select id="studyDetail">
+                        <option value="강계화">강계화</option>
+                        <option value="고준태">고준태</option>
+                        <option value="곽승철">곽승철</option>
+                        <option value="구금주">구금주</option>
+                        <option value="구대환">구대환</option>
+                    </select>
+
+                    <label style="margin-top:15px;">본관 이용 장소와 사유를 입력하세요</label>
+                    <textarea id="studyDetailReason" placeholder="이용 목적 및 구체적 사유 작성"></textarea>
+                </div>
+
+                <button class="btn-submit" onclick="submitStudy()">등록</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="outModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('outModal')">&times;</span>
+            <h2>외출·외박 신청</h2>
+            <div class="modal-body">
+                <label>구분</label>
+                <select id="outType">
+                    <option value="1">외출</option>
+                    <option value="2">외박</option>
+                </select>
+
+                <label>나가는 일시</label>
+                <div class="form-row">
+                    <input type="date" id="outBdate">
+                    <input type="time" id="outBtime" value="00:00">
+                </div>
+
+                <label>들어오는 일시</label>
+                <div class="form-row">
+                    <input type="date" id="outEdate">
+                    <input type="time" id="outEtime" value="00:00">
+                </div>
+
+                <label>사유</label>
+                <textarea id="outReason" placeholder="정확한 사유를 기술하세요."></textarea>
+
+                <button class="btn-submit btn-out" onclick="submitOut()">신청</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
