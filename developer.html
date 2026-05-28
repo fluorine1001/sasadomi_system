@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sasadomi Developer Portal</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 40px 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: var(--card); border-radius: 12px; padding: 30px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 24px; }
+        h1, h2 { margin-top: 0; color: #0f172a; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #1d4ed8; }
+        button.secondary { background: #64748b; }
+        button.secondary:hover { background: #475569; }
+        .flex { display: flex; gap: 10px; align-items: center; }
+        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+        .api-key-display { background: #f1f5f9; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 15px; border: 1px dashed #94a3b8; word-break: break-all; margin: 15px 0; display: flex; justify-content: space-between; align-items: center; }
+        .badge { background: #dcfce7; color: #15803d; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .hidden { display: none; }
+        textarea { width: 100%; height: 80px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; resize: vertical; margin-bottom: 10px; font-family: monospace; }
+        .hint { font-size: 13px; color: #64748b; margin-top: -5px; margin-bottom: 15px; }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        // ⚠️ 본인의 Firebase 프로젝트 설정값으로 교체하세요
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+            projectId: "YOUR_FIREBASE_PROJECT_ID",
+            storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        // 본인이 배포한 Express 백엔드 주소
+        const BACKEND_URL = 'http://localhost:3000/portal'; 
+        let userToken = '';
+        let currentApiKey = '';
+
+        // 🔐 구글 로그인 함수
+        window.login = () => {
+            signInWithPopup(auth, provider).catch(err => alert("로그인 실패: " + err.message));
+        };
+
+        // 🔓 로그아웃 함수
+        window.logout = () => {
+            signOut(auth).then(() => location.reload());
+        };
+
+        // 🔑 API 키 발급/재발급 요청
+        window.issueKey = async () => {
+            if(!confirm("새로운 API 키를 발급하시겠습니까? 기존 키는 즉시 폐기되어 작동이 중단됩니다.")) return;
+            try {
+                const res = await fetch(`${BACKEND_URL}/issue-key`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${userToken}` }
+                });
+                const data = await res.json();
+                if(data.success) {
+                    alert("새 API 키가 안전하게 발급되었습니다!");
+                    loadDeveloperData();
+                }
+            } catch (err) { alert("서버 통신 오류"); }
+        };
+
+        // 🌐 CORS 화이트리스트 도메인 저장
+        window.saveDomains = async () => {
+            const domainText = document.getElementById('domainsInput').value;
+            const allowedDomains = domainText.split('\n').map(d => d.trim()).filter(Boolean);
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/update-domains`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${userToken}`
+                    },
+                    body: JSON.stringify({ apiKey: currentApiKey, allowedDomains })
+                });
+                const data = await res.json();
+                if(data.success) alert("허용 도메인 설정이 저장되었습니다.");
+            } catch (err) { alert("서ver 오류"); }
+        };
+
+        // 🔄 백엔드 데이터 동기화
+        async function loadDeveloperData() {
+            try {
+                const res = await fetch(`${BACKEND_URL}/my-key`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${userToken}` }
+                });
+                const data = await res.json();
+
+                if (data.success && data.hasKey) {
+                    currentApiKey = data.apiKey;
+                    document.getElementById('keyDisplay').innerText = data.apiKey;
+                    document.getElementById('domainsInput').value = data.allowedDomains.join('\n');
+                    document.getElementById('hasKeyZone').classList.remove('hidden');
+                    document.getElementById('noKeyZone').classList.add('hidden');
+                } else {
+                    document.getElementById('hasKeyZone').classList.add('hidden');
+                    document.getElementById('noKeyZone').classList.remove('hidden');
+                }
+            } catch (err) { console.error("데이터 로드 실패", err); }
+        }
+
+        // 🕵️‍♂️ 유저 상태 감지 (핵심 라이프사이클)
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userToken = await user.getIdToken(); // 실무 보안의 핵심: JWT IdToken 추출
+                document.getElementById('userEmail').innerText = user.email;
+                document.getElementById('authZone').classList.add('hidden');
+                document.getElementById('dashboardZone').classList.remove('hidden');
+                loadDeveloperData();
+            } else {
+                document.getElementById('authZone').classList.remove('hidden');
+                document.getElementById('dashboardZone').classList.add('hidden');
+            }
+        });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="card" id="authZone">
+            <h1>🛠️ Sasadomi Developer Center</h1>
+            <p>사사도미 공용 오픈 API를 활용하여 고유의 서비스를 개발해보세요.</p>
+            <p style="color: #64748b; margin-bottom: 25px;">API 키 발급 및 CORS 도메인 관리를 위해 개발자 로그인이 필요합니다.</p>
+            <button onclick="login()">Google 계정으로 개발자 시작하기</button>
+        </div>
+
+        <div id="dashboardZone" class="hidden">
+            <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2 style="margin:0;">안녕하세요, <span id="userEmail" style="color:var(--primary);"></span>님!</h2>
+                    <p style="margin: 5px 0 0 0; font-size:14px; color:#64748b;">Sasadomi Public 플랫폼 대시보드</p>
+                </div>
+                <button class="secondary" onclick="logout()">로그아웃</button>
+            </div>
+
+            <div class="card hidden" id="noKeyZone">
+                <h3>🔑 API 발급 이력이 없습니다</h3>
+                <p>앱 및 웹 서비스 연동에 필요한 전용 API Key를 지금 즉시 발급받으실 수 있습니다.</p>
+                <button onclick="issueKey()">최초 API Key 발급받기</button>
+            </div>
+
+            <div class="card hidden" id="hasKeyZone">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>💳 발급된 내 API Key</h3>
+                    <span class="badge">ACTIVE</span>
+                </div>
+                <div class="api-key-display">
+                    <span id="keyDisplay">sasa_dev_...</span>
+                </div>
+                <p class="hint">⚠️ 이 키는 비밀번호와 같으므로 외부에 노출되지 않도록 주의하세요. 백엔드 환경변수(ENV) 저장을 권장합니다.</p>
+                <button class="secondary" onclick="issueKey()" style="margin-bottom: 30px;">API Key 무효화 및 재발급</button>
+
+                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin-bottom: 25px;">
+
+                <h3>🌐 브라우저 CORS 방화벽 설정 (도메인 화이트리스트)</h3>
+                <p class="hint">클라이언트 브라우저에서 직접 API를 호출할 경우, 아래에 입력된 도메인 엔드포인트만 접근을 승인합니다. (서버 대 서버 통신인 경우 비워두셔도 됩니다.)</p>
+                <textarea id="domainsInput" placeholder="https://my-app.vercel.app&#10;http://localhost:3000"></textarea>
+                <p class="hint">한 줄에 하나의 도메인만 입력해주세요. (엔터로 구분)</p>
+                <button onclick="saveDomains()">보안 도메인 저장하기</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
