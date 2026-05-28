@@ -15,16 +15,6 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-// 🟢 [수정됨] Vercel 환경에서 Swagger UI 파일 누락 에러(Unexpected token '<') 방지를 위해 CDN 사용
-const swaggerUiOptions = {
-    customSiteTitle: "Sasadomi API Docs",
-    customCssUrl: "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css",
-    customJs: [
-        "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js",
-    ],
-};
-
 app.options(/.*/, cors()); 
 
 // 🟢 [3단계 처리량 제한] 에러 코드 표준화 적용 (TOO_MANY_REQUESTS)
@@ -65,9 +55,43 @@ const swaggerOptions = {
 };
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    customSiteTitle: "Sasadomi API Docs"
-}));
+// 🟢 [Vercel 완벽 호환] swagger-ui-express 내부 로컬 정적파일 로더를 우회하여 순수 HTML과 외부 CDN으로 화면 렌더링
+app.get('/api-docs', (req, res) => {
+    const html = `
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <title>Sasadomi API Docs</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css" />
+        <style>
+            html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+            *, *:before, *:after { box-sizing: inherit; }
+            body { margin: 0; background: #fafafa; }
+        </style>
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js"></script>
+        <script>
+            window.onload = function() {
+                window.ui = SwaggerUIBundle({
+                    spec: ${JSON.stringify(swaggerSpec)},
+                    dom_id: '#swagger-ui',
+                    deepLinking: true,
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIStandalonePreset
+                    ],
+                    layout: "StandaloneLayout"
+                });
+            };
+        </script>
+    </body>
+    </html>`;
+    res.send(html);
+});
 
 if (!admin.apps.length) {
     admin.initializeApp({
@@ -130,7 +154,6 @@ app.get('/', (req, res) => {
 app.use('/v1', apiLimiter, verifyDeveloperApiKey, v1Router(db, admin));
 
 // 🟢 [추가됨] 외부 개발자 전용 포털 관리 라우터 바인딩
-// 이 엔드포인트는 개발자 센터 전용이므로 외부 API Rate Limit이나 x-api-key 검증에서 제외됩니다.
 app.use('/portal', portalRouter(db, admin)); 
 
 const PORT = process.env.PORT || 3000;
