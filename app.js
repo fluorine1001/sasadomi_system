@@ -17,6 +17,21 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// 📌 REST API v1: 상벌점 데이터 별도 호출 (추가됨)
+async function fetchPoints(studentId, token) {
+    try {
+        const res = await fetch(`${BACKEND_API_URL}/v1/points?studentId=${studentId}&token=${token}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY }
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            renderDashboard(data); 
+        } else { console.error("상벌점 내역 조회 실패:", data.message); }
+    } catch (error) { console.error("상벌점 내역 통신 오류:", error); }
+}
+
 // 📌 REST API v1: 자동 로그인
 async function autoLogin(token) {
     try {
@@ -34,7 +49,8 @@ async function autoLogin(token) {
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
-            renderDashboard(data);
+            // 🟢 로그인 성공 시 화면을 띄우고 데이터는 개별적으로 비동기 호출
+            fetchPoints(currentStudentId, currentSessionToken);
             fetchApplications(currentStudentId, currentSessionToken);
         } else {
             clearSession();
@@ -79,7 +95,8 @@ async function syncAccount() {
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
-            renderDashboard(data);
+            // 🟢 로그인 성공 시 화면을 띄우고 데이터는 개별적으로 비동기 호출
+            fetchPoints(currentStudentId, currentSessionToken);
             fetchApplications(currentStudentId, currentSessionToken);
             alert('성공적으로 계정이 연동 및 최신 데이터 동기화 완료되었습니다.');
         } else {
