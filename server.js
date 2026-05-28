@@ -21,12 +21,16 @@ app.use(cors({
 
 app.options(/.*/, cors()); 
 
-// 🟢 [수정됨] IPv6 파싱 에러 방지를 위해 req.ip 제거
+// 🟢 [3단계 처리량 제한] 에러 코드 표준화 적용 (TOO_MANY_REQUESTS)
 const apiLimiter = rateLimit({
     windowMs: 1 * 60 * 1000,
     max: 30,
     keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous_user',
-    message: { success: false, message: '요청 한도를 초과했습니다. 1분 후에 다시 시도해 주세요.' }
+    message: { 
+        success: false, 
+        code: 'TOO_MANY_REQUESTS', 
+        message: '요청 한도를 초과했습니다. 1분 후에 다시 시도해 주세요.' 
+    }
 });
 
 app.use(express.json());
@@ -70,23 +74,45 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
+// 🟢 [1단계/4단계] 에러 코드 표준화 적용 및 불필요한 api-docs 조건문 제거
 const verifyDeveloperApiKey = async (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
-    if (req.path.startsWith('/api-docs')) return next();
 
     const apiKey = req.headers['x-api-key'];
-    if (!apiKey) return res.status(401).json({ success: false, message: 'API Key 누락' });
+    if (!apiKey) {
+        return res.status(401).json({ 
+            success: false, 
+            code: 'MISSING_API_KEY', 
+            message: 'API Key가 누락되었습니다.' 
+        });
+    }
     
     try {
         const keyDoc = await db.collection('developers').doc(apiKey).get();
-        if (!keyDoc.exists) return res.status(403).json({ success: false, message: '유효하지 않은 API Key' });
-        if (keyDoc.data().isActive === false) return res.status(403).json({ success: false, message: '사용 정지된 API Key' });
+        if (!keyDoc.exists) {
+            return res.status(403).json({ 
+                success: false, 
+                code: 'INVALID_API_KEY', 
+                message: '유효하지 않은 API Key입니다.' 
+            });
+        }
+        if (keyDoc.data().isActive === false) {
+            return res.status(403).json({ 
+                success: false, 
+                code: 'SUSPENDED_API_KEY', 
+                message: '사용 정지된 API Key입니다.' 
+            });
+        }
         
         req.developer = keyDoc.data();
         next();
     } catch (error) {
         console.error("인증 에러:", error);
-        res.status(500).json({ success: false, message: '인증 서버 오류' });
+        res.status(500).json({ 
+            success: false, 
+            code: 'SERVER_ERROR', 
+            message: '인증 서버 오류가 발생했습니다.' 
+        });
     }
 };
 
