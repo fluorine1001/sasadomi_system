@@ -12,6 +12,17 @@ import v1Router from './routes/v1.js';
 
 const app = express();
 
+// 🟢 [핵심 추가] Vercel 같은 클라우드 환경에서 프록시(Proxy)를 거친 IP를 정상 인식하도록 설정
+app.set('trust proxy', 1);
+
+// 🟢 [핵심 수정] CORS 설정 및 브라우저의 사전 요청(OPTIONS) 명시적 완전 허용
+app.use(cors({
+    origin: '*', 
+    methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
+    allowedHeaders: ['Content-Type', 'x-api-key']
+}));
+app.options('*', cors()); // <- 브라우저가 보내는 Preflight(예비) 요청을 튕겨내지 않고 전부 통과시킴
+
 // 🟢 속도 제한 설정 (API Key 기준)
 const apiLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1분 동안
@@ -20,11 +31,6 @@ const apiLimiter = rateLimit({
     message: { success: false, message: '요청 한도를 초과했습니다. 1분 후에 다시 시도해 주세요.' }
 });
 
-app.use(cors({
-    origin: '*', 
-    methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
-    allowedHeaders: ['Content-Type', 'x-api-key']
-}));
 app.use(express.json());
 
 // 🟢 Swagger API 문서 기본 정보 설정
@@ -48,7 +54,6 @@ const swaggerOptions = {
         },
         security: [{ ApiKeyAuth: [] }]
     },
-    // routes 폴더 안의 모든 js 파일에서 주석을 읽어와 문서를 생성합니다.
     apis: ['./routes/*.js'], 
 };
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -72,9 +77,10 @@ const db = admin.firestore();
 
 // 🟢 API Key 검증 미들웨어
 const verifyDeveloperApiKey = async (req, res, next) => {
+    // OPTIONS 요청은 위에서 cors()가 처리하더라도 확실히 넘어가도록 이중 방어
     if (req.method === 'OPTIONS') return next();
     
-    // api-docs(문서 페이지) 접속은 API Key 검증을 면제합니다. (누구나 문서는 볼 수 있어야 하므로)
+    // api-docs(문서 페이지) 접속은 API Key 검증 면제
     if (req.path.startsWith('/api-docs')) return next();
 
     const apiKey = req.headers['x-api-key'];
@@ -88,6 +94,7 @@ const verifyDeveloperApiKey = async (req, res, next) => {
         req.developer = keyDoc.data();
         next();
     } catch (error) {
+        console.error("인증 에러:", error);
         res.status(500).json({ success: false, message: '인증 서버 오류' });
     }
 };
