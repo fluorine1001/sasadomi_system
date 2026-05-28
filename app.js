@@ -8,6 +8,9 @@ let currentStudentId = '';
 let currentSessionToken = ''; // 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수
 
 window.addEventListener('DOMContentLoaded', () => {
+    // 🟢 화면 로드 시 서버에서 드롭다운 옵션들을 받아와 채워넣습니다.
+    fetchOptions(); 
+
     const savedToken = localStorage.getItem('sasa_sessionToken');
     if (savedToken) {
         if (document.getElementById('rememberMe')) {
@@ -16,6 +19,35 @@ window.addEventListener('DOMContentLoaded', () => {
         autoLogin(savedToken);
     }
 });
+
+// 📌 REST API v1: 메타데이터(드롭다운 옵션) 로드
+async function fetchOptions() {
+    try {
+        const res = await fetch(`${BACKEND_API_URL}/v1/meta/options`, {
+            headers: { 'x-api-key': SASADOMI_API_KEY }
+        });
+        const data = await res.json();
+        if (data.success) {
+            populateSelect('studyTime', data.studyTimes);
+            populateSelect('studyPlace', data.studyPlaces);
+            populateSelect('studyDetail', data.teachers.map(t => ({value: t, label: t})));
+            populateSelect('outBtime', data.outTimes.map(t => ({value: t, label: t})));
+            populateSelect('outEtime', data.outTimes.map(t => ({value: t, label: t})));
+        }
+    } catch (error) { console.error("옵션 데이터 로드 실패", error); }
+}
+
+function populateSelect(id, optionsList) {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.innerHTML = '';
+    optionsList.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        select.appendChild(option);
+    });
+}
 
 // 📌 REST API v1: 상벌점 데이터 별도 호출
 async function fetchPoints(studentId, token) {
@@ -65,8 +97,6 @@ async function syncAccount() {
     if (!rawStudentId || !studentPw) return alert('아이디와 패스워드를 적어주세요.');
 
     const studentId = rawStudentId.trim().toLowerCase();
-    
-    // UI 단에서의 학번 양식 검증은 유지 (백엔드 오류 방지)
     if (studentId.length !== 11 || !studentId.startsWith('s')) {
         return alert('올바른 학번 양식(s년도학년반번호)으로 입력해 주세요.\n예: s2026030601');
     }
@@ -75,7 +105,7 @@ async function syncAccount() {
         const res = await fetch(`${BACKEND_API_URL}/v1/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
-            // 🟢 [변경] 더 이상 grade, sclass, number를 프론트에서 분리해 보내지 않습니다.
+            // 🟢 백엔드가 학번을 파싱하므로 프론트에서는 아이디와 비밀번호만 전송
             body: JSON.stringify({ studentId, studentPw }) 
         });
 
@@ -105,7 +135,7 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링
+// 📌 대시보드 UI 렌더링 (기존 로직 완벽 유지)
 function renderDashboard(data) {
     document.getElementById('rewardView').innerText = data.totalReward;
     document.getElementById('penaltyView').innerText = data.totalPenalty;
@@ -231,8 +261,10 @@ async function disconnectAccount() {
             document.getElementById('rewardView').innerText = '0';
             document.getElementById('penaltyView').innerText = '0';
             document.querySelector('#historyTable tbody').innerHTML = '';
-            document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
-            document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            
+            // 🟢 테이블 초기화 영역도 8열/6열 적용
+            document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="8" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;">내역을 불러오는 중...</td></tr>';
             closeModal('studyModal');
             closeModal('outModal');
         } else { alert(data.message || '연동 해제 실패'); }
@@ -243,7 +275,7 @@ function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 
-// 📌 REST API v1: 신청 내역 조회
+// 📌 REST API v1: 신청 내역 조회 (GET 방식, 쿼리파라미터 사용)
 async function fetchApplications(studentId, token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/v1/applications?studentId=${studentId}&token=${token}`, {
@@ -264,27 +296,28 @@ function renderStudyList(list) {
     tbody.innerHTML = '';
     
     if (!list || list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
         return;
     }
     
     list.forEach(item => {
         const actionHtml = item.id 
-            ? `<button onclick="deleteApplication('study', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>`
-            : `<span style="margin-left:8px; color:#aaa; font-size:11px; font-weight:normal;">[변경불가]</span>`;
+            ? `<button onclick="deleteApplication('study', '${item.id}')" style="padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">취소</button>`
+            : `<span style="color:#aaa; font-size:11px; font-weight:normal;">-</span>`;
 
         const tr = document.createElement('tr');
         if (item.id) tr.id = `row-study-${item.id}`; // 실시간 삭제를 위한 ID 부여
 
+        // 🟢 8열 구조로 렌더링 (비어있는 값은 빈칸 유지)
         tr.innerHTML = `
-            <td>${item.date}</td>
-            <td>${item.time}</td>
-            <td>${item.place}</td>
-            <td>${item.detail || '없음'}</td>
-            <td>
-                <span class="status-badge">${item.status}</span>
-                ${actionHtml}
-            </td>
+            <td>${actionHtml}</td>
+            <td>${item.date || ''}</td>
+            <td>${item.time || ''}</td>
+            <td>${item.place || ''}</td>
+            <td>${item.teacher || ''}</td>
+            <td>${item.detail || ''}</td>
+            <td>${item.applyDate || ''}</td>
+            <td><span class="status-badge">${item.status || ''}</span></td>
         `;
         tbody.appendChild(tr);
     });
@@ -295,33 +328,32 @@ function renderOutList(list) {
     tbody.innerHTML = '';
     
     if (!list || list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
         return;
     }
     
     list.forEach(item => {
         const actionHtml = item.id 
-            ? `<button onclick="deleteApplication('out', '${item.id}')" style="margin-left:8px; padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">삭제</button>`
-            : `<span style="margin-left:8px; color:#999; font-size:11px; font-style:italic;">[취소불가]</span>`;
+            ? `<button onclick="deleteApplication('out', '${item.id}')" style="padding:3px 8px; background:#ff4d4f; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">취소</button>`
+            : `<span style="color:#999; font-size:11px; font-style:italic;">-</span>`;
 
         const tr = document.createElement('tr');
         if (item.id) tr.id = `row-out-${item.id}`;
 
+        // 🟢 6열 구조로 렌더링
         tr.innerHTML = `
-            <td><strong>${item.type}</strong></td>
-            <td>${item.reason}</td>
-            <td>${item.outDate}</td>
-            <td>${item.inDate}</td>
-            <td>
-                <span class="status-badge">${item.status}</span>
-                ${actionHtml}
-            </td>
+            <td>${actionHtml}</td>
+            <td><strong>${item.type || ''}</strong></td>
+            <td>${item.reason || ''}</td>
+            <td>${item.outDate || ''}</td>
+            <td>${item.inDate || ''}</td>
+            <td><span class="status-badge">${item.status || ''}</span></td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-// 📌 REST API v1: 취소/삭제 대행
+// 📌 REST API v1: 취소/삭제 대행 (DELETE 방식, 실시간 UI 제거 적용)
 async function deleteApplication(type, id) {
     if (!id || id === 'undefined' || id === '') {
         alert("이 항목은 학교 시스템상 이미 확정되어 원격 취소/삭제가 불가능합니다.");
@@ -346,12 +378,16 @@ async function deleteApplication(type, id) {
             const rowElement = document.getElementById(`row-${type}-${id}`);
             if (rowElement) rowElement.remove();
 
-            const tableId = type === 'study' ? '#studyHistoryTable tbody' : '#outHistoryTable tbody';
+            const isStudy = type === 'study';
+            const tableId = isStudy ? '#studyHistoryTable tbody' : '#outHistoryTable tbody';
+            const colSpan = isStudy ? 8 : 6;
+
             const tbody = document.querySelector(tableId);
             if (tbody && tbody.children.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>`;
             }
 
+            // DB 싱크를 맞추기 위해 1초 뒤 조용히 백그라운드 새로고침
             setTimeout(() => { fetchApplications(currentStudentId, activeToken); }, 1000);
         } else {
             alert(data.message || '삭제 실패');
