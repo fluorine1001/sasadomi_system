@@ -189,11 +189,13 @@ export default function v1Router(db, admin) {
      * - in: query
      * name: studentId
      * required: true
-     * schema: { type: string }
+     * schema: 
+     * type: string 
      * - in: query
      * name: token
      * required: true
-     * schema: { type: string }
+     * schema: 
+     * type: string 
      * responses:
      * 200:
      * description: 신청 내역 배열 반환
@@ -337,12 +339,15 @@ export default function v1Router(db, admin) {
      * - in: path
      * name: type
      * required: true
-     * schema: { type: string, enum: [study, out] }
+     * schema: 
+     * type: string
+     * enum: [study, out] 
      * description: "취소할 종류 (study 또는 out)"
      * - in: path
      * name: id
      * required: true
-     * schema: { type: string }
+     * schema: 
+     * type: string 
      * description: "취소할 항목의 고유 ID"
      * requestBody:
      * required: true
