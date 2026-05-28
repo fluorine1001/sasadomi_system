@@ -15,13 +15,15 @@ const app = express();
 // 🟢 [핵심 추가] Vercel 같은 클라우드 환경에서 프록시(Proxy)를 거친 IP를 정상 인식하도록 설정
 app.set('trust proxy', 1);
 
-// 🟢 [핵심 수정] CORS 설정 및 브라우저의 사전 요청(OPTIONS) 명시적 완전 허용
+// 🟢 CORS 설정 및 브라우저의 사전 요청(OPTIONS) 명시적 완전 허용
 app.use(cors({
     origin: '*', 
     methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
     allowedHeaders: ['Content-Type', 'x-api-key']
 }));
-app.options('*', cors()); // <- 브라우저가 보내는 Preflight(예비) 요청을 튕겨내지 않고 전부 통과시킴
+
+// 🟢 [핵심 수정] Express 5.0 호환을 위해 '*' 문자열 대신 정규표현식 /.*/ 사용으로 변경
+app.options(/.*/, cors()); 
 
 // 🟢 속도 제한 설정 (API Key 기준)
 const apiLimiter = rateLimit({
