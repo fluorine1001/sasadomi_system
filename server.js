@@ -19,7 +19,7 @@ app.set('trust proxy', 1);
 app.use(cors({
     origin: '*', // 실무에서 프론트엔드 도메인만 제한하려면 '*' 대신 'https://fluorine1001.github.io'를 작성하세요.
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-api-key'],
+    allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'],
     credentials: true
 }));
 
