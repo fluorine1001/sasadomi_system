@@ -582,7 +582,7 @@ export default function v1Router(db, admin) {
      *             properties:
      *               studentId: { type: string, example: "s2024010101" }
      *               token: { type: string, example: "a1b2c3d4..." }
-     *               date: { type: string, description: "신청 날짜 (YYYY-MM-DD 규격 등 파싱 가능 형식)", example: "2026-05-29" }
+     *               date: { type: string, description: "신청 날짜 (YYYY-MM-DD 형식). 서버에서 KST 00:00:00 기준 Unix timestamp로 변환하여 전송합니다.", example: "2026-05-29" }
      *               time: { type: string, description: "반드시 /v1/meta/options에서 조회한 studyTimes의 value 값을 사용해야 합니다 (예: 1~6)", example: "3" }
      *               place: { type: string, description: "반드시 /v1/meta/options에서 조회한 studyPlaces의 value 값을 사용해야 합니다. '3'은 본관을 의미합니다.", example: "3" }
      *               detail: { type: string, description: "지도교사 이름. 장소(place)가 '3'(본관)인 경우에만 필수 선택 항목이며, 그 외 장소일 경우에는 강제로 빈 문자열('')이 전송됩니다.", example: "김사사" }
@@ -656,14 +656,16 @@ export default function v1Router(db, admin) {
      *         application/json:
      *           schema:
      *             type: object
-     *             required: [studentId, token, type, reason, bdate, edate]
+     *             required: [studentId, token, type, reason, bdate, btime, edate, etime]
      *             properties:
      *               studentId: { type: string, example: "s2024010101" }
      *               token: { type: string }
      *               type: { type: string, enum: [외출, 외박], example: "외출" }
      *               reason: { type: string, example: "서점 방문 및 도서 구매" }
-     *               bdate: { type: string, description: "출발 일시 정보", example: "2026-05-29 17:00" }
-     *               edate: { type: string, description: "귀교 일시 정보", example: "2026-05-29 21:00" }
+     *               bdate: { type: string, description: "출발 날짜 (YYYY-MM-DD 형식)", example: "2026-05-29" }
+     *               btime: { type: string, description: "출발 시간. 'HH:MM' 또는 숫자('17')로 전달 가능하며, 서버에서 'HH:00' 형태로 정규화 후 KST 기준 Unix timestamp로 변환합니다.", example: "17:00" }
+     *               edate: { type: string, description: "귀교 날짜 (YYYY-MM-DD 형식)", example: "2026-05-29" }
+     *               etime: { type: string, description: "귀교 시간. 'HH:MM' 또는 숫자('21')로 전달 가능하며, 서버에서 'HH:00' 형태로 정규화 후 KST 기준 Unix timestamp로 변환합니다.", example: "21:00" }
      *     responses:
      *       200:
      *         description: 외출/외박 폼 접수 성공
