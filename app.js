@@ -135,29 +135,39 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 (기존 로직 완벽 유지)
+// 📌 대시보드 UI 렌더링 (기존 로직 완벽 유지 + 안전장치 추가)
 function renderDashboard(data) {
-    document.getElementById('rewardView').innerText = data.totalReward;
-    document.getElementById('penaltyView').innerText = data.totalPenalty;
+    const rewardView = document.getElementById('rewardView');
+    const penaltyView = document.getElementById('penaltyView');
+    const dashboard = document.getElementById('dashboard');
+
+    if (rewardView) rewardView.innerText = data.totalReward;
+    if (penaltyView) penaltyView.innerText = data.totalPenalty;
 
     const rewards = (data.rewardList || []).map(item => ({ ...item, type: '상점', color: '#1890ff' }));
     const penalties = (data.penaltyList || []).map(item => ({ ...item, type: '벌점', color: '#ff4d4f' }));
     const combinedList = [...rewards, ...penalties];
 
     const tbody = document.querySelector('#historyTable tbody');
-    tbody.innerHTML = '';
     
-    combinedList.forEach(item => {
-        tbody.innerHTML += `<tr>
-            <td style="color: ${item.color}; font-weight: bold;">${item.type}</td>
-            <td>${item.score}</td>
-            <td>${item.weight}</td>
-            <td>${item.reason}</td>
-            <td>${item.date}</td>
-        </tr>`;
-    });
+    // 🟢 안전장치: HTML에 테이블(tbody)이 존재할 때만 실행
+    if (tbody) {
+        tbody.innerHTML = '';
+        combinedList.forEach(item => {
+            tbody.innerHTML += `<tr>
+                <td style="color: ${item.color}; font-weight: bold;">${item.type}</td>
+                <td>${item.score}</td>
+                <td>${item.weight}</td>
+                <td>${item.reason}</td>
+                <td>${item.date}</td>
+            </tr>`;
+        });
+    } else {
+        // 🔴 테이블을 찾지 못했을 때 브라우저 콘솔에 경고 표시
+        console.warn("경고: HTML 파일에 id가 'historyTable'인 table 요소나 tbody가 존재하지 않습니다.");
+    }
 
-    document.getElementById('dashboard').style.display = 'block';
+    if (dashboard) dashboard.style.display = 'block';
 }
 
 function clearSession() { localStorage.removeItem('sasa_sessionToken'); }
