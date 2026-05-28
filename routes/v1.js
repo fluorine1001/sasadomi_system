@@ -75,11 +75,8 @@ export default function v1Router(db, admin) {
      * schema:
      * type: object
      * properties:
-     * studentId: { type: string, example: "s2024010101" }
+     * studentId: { type: string, example: "s2026030601" }
      * studentPw: { type: string, example: "mypassword!" }
-     * grade: { type: string, example: "1" }
-     * sclass: { type: string, example: "1" }
-     * number: { type: string, example: "01" }
      * responses:
      * 200:
      * description: 로그인 성공 및 세션 토큰 반환
@@ -92,8 +89,17 @@ export default function v1Router(db, admin) {
      * sessionToken: { type: string, example: "c9b1cc70-7988-4447-92bb-92762a4d3cfd" }
      */
     router.post('/auth/login', async (req, res) => {
-        const { studentId, studentPw, grade, sclass, number } = req.body;
+        const { studentId, studentPw } = req.body;
+        
         try {
+            // 🟢 [추가] 백엔드에서 자체적으로 학번을 파싱하여 학년, 반, 번호 추출
+            if (!studentId || studentId.length !== 11) {
+                return res.status(400).json({ success: false, message: '올바른 학번(11자리)을 제공해주세요.' });
+            }
+            const grade = parseInt(studentId.substring(5, 7), 10).toString();
+            const sclass = parseInt(studentId.substring(7, 9), 10).toString();
+            const number = parseInt(studentId.substring(9, 11), 10).toString();
+
             const client = await getAuthenticatedSession(studentId, studentPw);
             const encryptedPw = encrypt(studentPw);
             
@@ -106,7 +112,6 @@ export default function v1Router(db, admin) {
                 studentId: studentId, createdAt: new Date()
             });
 
-            // 🟢 데이터 크롤링 제거하고 토큰만 신속 반환
             res.json({ success: true, sessionToken });
         } catch (error) { res.status(500).json({ success: false, message: `오류: ${error.message}` }); }
     });
@@ -134,7 +139,7 @@ export default function v1Router(db, admin) {
      * type: object
      * properties:
      * success: { type: boolean, example: true }
-     * studentId: { type: string, example: "s2024010101" }
+     * studentId: { type: string, example: "s2026030601" }
      */
     router.post('/auth/auto-login', async (req, res) => {
         const { token } = req.body;
@@ -147,7 +152,6 @@ export default function v1Router(db, admin) {
             const userDoc = await db.collection('users').doc(studentId).get();
             if (!userDoc.exists) return res.status(401).json({ success: false, message: '유저 정보 없음' });
 
-            // 🟢 데이터 크롤링 제거하고 검증 결과만 신속 반환
             res.json({ success: true, studentId });
         } catch (error) { res.status(500).json({ success: false, message: `오류: ${error.message}` }); }
     });
@@ -165,7 +169,7 @@ export default function v1Router(db, admin) {
      * schema:
      * type: object
      * properties:
-     * studentId: { type: string, example: "s2024010101" }
+     * studentId: { type: string, example: "s2026030601" }
      * token: { type: string }
      * responses:
      * 200:
@@ -177,7 +181,7 @@ export default function v1Router(db, admin) {
             await db.collection('users').doc(studentId).delete();
             if (token) await db.collection('sessions').doc(token).delete();
             myCache.del(`apps_${studentId}`);
-            myCache.del(`points_${studentId}`); // 🟢 상벌점 캐시도 동시 삭제
+            myCache.del(`points_${studentId}`);
             res.json({ success: true, message: '계정 연동이 해제되었습니다.' });
         } catch (error) { res.status(500).json({ success: false }); }
     });
