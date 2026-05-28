@@ -64,6 +64,50 @@ export default function v1Router(db, admin) {
 
     /**
      * @swagger
+     * /v1/meta/options:
+     * get:
+     * summary: 신청 폼 선택지(메타데이터) 조회
+     * tags: [Meta]
+     * responses:
+     * 200:
+     * description: 자율학습 및 외출 신청에 필요한 옵션 목록 반환
+     */
+    router.get('/meta/options', (req, res) => {
+        res.json({
+            success: true,
+            studyTimes: [
+                { value: "1", label: "오전" }, { value: "2", label: "오후" },
+                { value: "3", label: "학습 I" }, { value: "4", label: "학습 II" },
+                { value: "5", label: "연장 학습(00~01시)" }, { value: "6", label: "연장 학습(01~02시)" }
+            ],
+            studyPlaces: [
+                { value: "1", label: "호실(요양)-주간 평일 3회" }, { value: "2", label: "휴게실" },
+                { value: "3", label: "본관" }, { value: "4", label: "정독실" },
+                { value: "5", label: "세미나공간" }, { value: "6", label: "3층 스터디룸" },
+                { value: "7", label: "소학습실(1층)" }, { value: "8", label: "소학습실(2층)" },
+                { value: "9", label: "소학습실(3층)" }, { value: "10", label: "소학습실(4층)" },
+                { value: "11", label: "소학습실(5층)" }
+            ],
+            teachers: [
+                "강계화", "고민지", "고유선", "고준태", "곽승철", "구금주", "구대환", "길승호", 
+                "김기향", "김대중", "김명희", "김문태", "김미리", "김백진", "김선아", "김수미", 
+                "김승진", "김승현", "김승환", "김예은", "김정화", "김종헌", "김지현", "김지혜", 
+                "김현철", "김희수", "남민경", "문재은", "박고운", "박순", "박연순", "박은영", 
+                "손창환", "신현정", "안정수", "양영규", "유연정", "이경민", "이경진", "이동천", 
+                "이민호", "이산", "이상숙", "이성현", "이승현", "이예찬", "이제림", "이주미", 
+                "이지은", "이현아", "이효빈", "임건웅", "장혜민", "전윤미", "전재성", "정세영", 
+                "조승훈", "조현주", "주지웅", "진대성", "진소영", "한지선", "홍주환", "휴일도서관"
+            ],
+            outTimes: [
+                "00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00",
+                "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
+                "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"
+            ]
+        });
+    });
+
+    /**
+     * @swagger
      * /v1/auth/login:
      * post:
      * summary: 학교 계정으로 로그인 및 연동
@@ -75,31 +119,14 @@ export default function v1Router(db, admin) {
      * schema:
      * type: object
      * properties:
-     * studentId: { type: string, example: "s2026030601" }
+     * studentId: { type: string, example: "s2024010101" }
      * studentPw: { type: string, example: "mypassword!" }
      * responses:
      * 200:
      * description: 로그인 성공 및 세션 토큰 반환
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * sessionToken: { type: string, example: "c9b1cc70-7988-4447-92bb-92762a4d3cfd" }
-     * 400:
-     * description: 잘못된 요청 (학번 양식 오류 등)
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: false }
-     * message: { type: string, example: "올바른 학번(11자리)을 제공해주세요." }
      */
     router.post('/auth/login', async (req, res) => {
         const { studentId, studentPw } = req.body;
-        
         try {
             if (!studentId || studentId.length !== 11) {
                 return res.status(400).json({ success: false, message: '올바른 학번(11자리)을 제공해주세요.' });
@@ -141,22 +168,6 @@ export default function v1Router(db, admin) {
      * responses:
      * 200:
      * description: 토큰 인증 성공
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * studentId: { type: string, example: "s2026030601" }
-     * 401:
-     * description: 유효하지 않거나 만료된 토큰
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: false }
-     * message: { type: string, example: "만료된 세션" }
      */
     router.post('/auth/auto-login', async (req, res) => {
         const { token } = req.body;
@@ -186,18 +197,11 @@ export default function v1Router(db, admin) {
      * schema:
      * type: object
      * properties:
-     * studentId: { type: string, example: "s2026030601" }
+     * studentId: { type: string, example: "s2024010101" }
      * token: { type: string }
      * responses:
      * 200:
      * description: 연동 해제 완료
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * message: { type: string, example: "계정 연동이 해제되었습니다." }
      */
     router.post('/auth/disconnect', async (req, res) => {
         const { studentId, token } = req.body;
@@ -220,46 +224,14 @@ export default function v1Router(db, admin) {
      * - in: query
      * name: studentId
      * required: true
-     * schema:
-     * type: string
+     * schema: { type: string }
      * - in: query
      * name: token
      * required: true
-     * schema:
-     * type: string
+     * schema: { type: string }
      * responses:
      * 200:
-     * description: 상벌점 요약 및 상세 리스트 반환
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * totalReward: { type: string, description: "누적 상점 총합", example: "12" }
-     * totalPenalty: { type: string, description: "누적 벌점 총합", example: "3" }
-     * rewardList:
-     * type: array
-     * description: 상점 상세 내역 목록
-     * items:
-     * type: object
-     * properties:
-     * score: { type: string, description: "부여 점수", example: "2" }
-     * weight: { type: string, description: "가중치", example: "1.0" }
-     * reason: { type: string, description: "상점 사유", example: "호실 정돈 우수" }
-     * date: { type: string, description: "부여 일자", example: "2026-05-15" }
-     * penaltyList:
-     * type: array
-     * description: 벌점 상세 내역 목록
-     * items:
-     * type: object
-     * properties:
-     * score: { type: string, description: "부여 점수", example: "1" }
-     * weight: { type: string, description: "가중치", example: "1.0" }
-     * reason: { type: string, description: "벌점 사유", example: "지각" }
-     * date: { type: string, description: "부여 일자", example: "2026-05-10" }
-     * 401:
-     * description: 권한 없음 (토큰 누락 또는 유효하지 않음)
+     * description: 상벌점 요약 및 리스트 반환
      */
     router.get('/points', async (req, res) => {
         const { studentId, token } = req.query;
@@ -294,9 +266,7 @@ export default function v1Router(db, admin) {
 
             myCache.set(cacheKey, responseData);
             res.json(responseData);
-        } catch (error) { 
-            res.status(500).json({ success: false, message: `서버 오류: ${error.message}` }); 
-        }
+        } catch (error) { res.status(500).json({ success: false, message: `서버 오류: ${error.message}` }); }
     });
 
     /**
@@ -309,50 +279,14 @@ export default function v1Router(db, admin) {
      * - in: query
      * name: studentId
      * required: true
-     * schema:
-     * type: string
+     * schema: { type: string }
      * - in: query
      * name: token
      * required: true
-     * schema:
-     * type: string
+     * schema: { type: string }
      * responses:
      * 200:
      * description: 신청 내역 목록 반환
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * studyList:
-     * type: array
-     * description: 자율학습 신청 내역 목록
-     * items:
-     * type: object
-     * properties:
-     * id: { type: string, description: "신청 고유 ID (삭제 시 필요)", example: "24551" }
-     * date: { type: string, example: "2026-05-29" }
-     * time: { type: string, example: "1자율" }
-     * place: { type: string, example: "본관" }
-     * teacher: { type: string, example: "홍길동 선생님" }
-     * detail: { type: string, example: "정보실" }
-     * applyDate: { type: string, example: "2026-05-28 14:15" }
-     * status: { type: string, example: "승인" }
-     * outList:
-     * type: array
-     * description: 외출/외박 신청 내역 목록
-     * items:
-     * type: object
-     * properties:
-     * id: { type: string, description: "신청 고유 ID (삭제 시 필요)", example: "9872" }
-     * type: { type: string, example: "외박" }
-     * reason: { type: string, example: "병원 진료" }
-     * outDate: { type: string, example: "05-15(금) 21:00" }
-     * inDate: { type: string, example: "05-17(일) 21:00" }
-     * status: { type: string, example: "대기" }
-     * 401:
-     * description: 권한 없음 (토큰 누락 또는 유효하지 않음)
      */
     router.get('/applications', async (req, res) => {
         const { studentId, token } = req.query;
@@ -369,7 +303,7 @@ export default function v1Router(db, admin) {
             const userDoc = await db.collection('users').doc(studentId).get();
             const client = await getAuthenticatedSession(studentId, decrypt(userDoc.data().encryptedPw));
 
-            // 🟢 자율학습 내역 파싱 수정 (테이블 8열 구조 반영)
+            // 🟢 자율학습 내역 8열 구조 적용
             const studyRes = await client.get(`${SCHOOL_BASE_URL}/study/list.php`);
             const $study = cheerio.load(studyRes.data);
             const studyList = [];
@@ -398,8 +332,10 @@ export default function v1Router(db, admin) {
                     const timeParts = tds.eq(3).text().replace(/\s+/g, ' ').trim().split('-').map(t => t.trim());
                     outList.push({
                         id: tds.eq(0).find('input[name=itemCheck]').val() || '',
-                        type: tds.eq(2).text().trim(), reason: tds.eq(4).text().trim(),
-                        outDate: timeParts[0] || '', inDate: timeParts[1] || '',
+                        type: tds.eq(2).text().trim(), 
+                        reason: tds.eq(4).text().trim(),
+                        outDate: timeParts[0] || '', 
+                        inDate: timeParts[1] || '',
                         status: tds.last().text().trim() || '대기'
                     });
                 }
@@ -432,24 +368,8 @@ export default function v1Router(db, admin) {
      * detail: { type: string, example: "면학실" }
      * detail_reason: { type: string }
      * responses:
-     * 200:
+     * 201:
      * description: 신청 성공
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * message: { type: string, example: "완료" }
-     * 400:
-     * description: 신청 기간이 아니거나 이미 신청된 상태
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: false }
-     * message: { type: string, example: "신청 기간 아님 / 이미 신청됨" }
      */
     router.post('/applications/study', async (req, res) => {
         const { studentId, token, date, time, place, detail, detail_reason } = req.body;
@@ -486,24 +406,8 @@ export default function v1Router(db, admin) {
      * bdate: { type: integer, description: "시작 시간 Timestamp" }
      * edate: { type: integer, description: "종료 시간 Timestamp" }
      * responses:
-     * 200:
+     * 201:
      * description: 신청 완료
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * message: { type: string, example: "완료" }
-     * 400:
-     * description: 학교 웹사이트 내 거절 처리
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: false }
-     * message: { type: string, example: "외출 거절됨" }
      */
     router.post('/applications/out', async (req, res) => {
         const { studentId, token, type, reason, bdate, edate } = req.body;
@@ -552,31 +456,6 @@ export default function v1Router(db, admin) {
      * responses:
      * 200:
      * description: 삭제 성공
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * message: { type: string, example: "삭제됨" }
-     * 400:
-     * description: 이미 승인/거절되어 시스템상 삭제 불가
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: false }
-     * message: { type: string, example: "이미 승인/거절되어 삭제 불가" }
-     * 403:
-     * description: 권한 없음
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: false }
-     * message: { type: string, example: "권한 없음" }
      */
     router.delete('/applications/:type/:id', async (req, res) => {
         const { type, id } = req.params;
