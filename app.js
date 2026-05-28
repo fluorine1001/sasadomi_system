@@ -17,7 +17,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 📌 REST API v1: 상벌점 데이터 별도 호출 (추가됨)
+// 📌 REST API v1: 상벌점 데이터 별도 호출
 async function fetchPoints(studentId, token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/v1/points?studentId=${studentId}&token=${token}`, {
@@ -49,7 +49,6 @@ async function autoLogin(token) {
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
-            // 🟢 로그인 성공 시 화면을 띄우고 데이터는 개별적으로 비동기 호출
             fetchPoints(currentStudentId, currentSessionToken);
             fetchApplications(currentStudentId, currentSessionToken);
         } else {
@@ -66,19 +65,18 @@ async function syncAccount() {
     if (!rawStudentId || !studentPw) return alert('아이디와 패스워드를 적어주세요.');
 
     const studentId = rawStudentId.trim().toLowerCase();
+    
+    // UI 단에서의 학번 양식 검증은 유지 (백엔드 오류 방지)
     if (studentId.length !== 11 || !studentId.startsWith('s')) {
         return alert('올바른 학번 양식(s년도학년반번호)으로 입력해 주세요.\n예: s2026030601');
     }
-
-    const grade = parseInt(studentId.substring(5, 7), 10).toString();
-    const sclass = parseInt(studentId.substring(7, 9), 10).toString();
-    const number = parseInt(studentId.substring(9, 11), 10).toString();
 
     try {
         const res = await fetch(`${BACKEND_API_URL}/v1/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
-            body: JSON.stringify({ studentId, studentPw, grade, sclass, number })
+            // 🟢 [변경] 더 이상 grade, sclass, number를 프론트에서 분리해 보내지 않습니다.
+            body: JSON.stringify({ studentId, studentPw }) 
         });
 
         const data = await res.json();
@@ -95,7 +93,6 @@ async function syncAccount() {
             const loginForm = document.getElementById('loginForm');
             if (loginForm) loginForm.style.display = 'none';
 
-            // 🟢 로그인 성공 시 화면을 띄우고 데이터는 개별적으로 비동기 호출
             fetchPoints(currentStudentId, currentSessionToken);
             fetchApplications(currentStudentId, currentSessionToken);
             alert('성공적으로 계정이 연동 및 최신 데이터 동기화 완료되었습니다.');
@@ -108,7 +105,7 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 (기존 로직 완벽 유지)
+// 📌 대시보드 UI 렌더링
 function renderDashboard(data) {
     document.getElementById('rewardView').innerText = data.totalReward;
     document.getElementById('penaltyView').innerText = data.totalPenalty;
@@ -246,7 +243,7 @@ function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 
-// 📌 REST API v1: 신청 내역 조회 (GET 방식, 쿼리파라미터 사용)
+// 📌 REST API v1: 신청 내역 조회
 async function fetchApplications(studentId, token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/v1/applications?studentId=${studentId}&token=${token}`, {
@@ -324,7 +321,7 @@ function renderOutList(list) {
     });
 }
 
-// 📌 REST API v1: 취소/삭제 대행 (DELETE 방식, 실시간 UI 제거 적용)
+// 📌 REST API v1: 취소/삭제 대행
 async function deleteApplication(type, id) {
     if (!id || id === 'undefined' || id === '') {
         alert("이 항목은 학교 시스템상 이미 확정되어 원격 취소/삭제가 불가능합니다.");
@@ -355,7 +352,6 @@ async function deleteApplication(type, id) {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
             }
 
-            // DB 싱크를 맞추기 위해 1초 뒤 조용히 백그라운드 새로고침
             setTimeout(() => { fetchApplications(currentStudentId, activeToken); }, 1000);
         } else {
             alert(data.message || '삭제 실패');
