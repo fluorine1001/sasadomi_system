@@ -15,11 +15,15 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-app.use(cors({
-    origin: '*', 
-    methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
-    allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'] // Authorization 헤더 추가 허용 (포털 토큰용)
-}));
+// 🟢 [수정됨] Vercel 환경에서 Swagger UI 파일 누락 에러(Unexpected token '<') 방지를 위해 CDN 사용
+const swaggerUiOptions = {
+    customSiteTitle: "Sasadomi API Docs",
+    customCssUrl: "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css",
+    customJs: [
+        "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js",
+    ],
+};
 
 app.options(/.*/, cors()); 
 
