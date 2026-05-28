@@ -131,9 +131,9 @@
                 <select id="studyTime"></select>
 
                 <label>장소</label>
-                <select id="studyPlace"></select>
+                <select id="studyPlace" onchange="toggleStudyFields(this.value)"></select>
 
-                <div id="studyDetailGroup">
+                <div id="studyDetailGroup" style="display: none;">
                     <label>지도 교사 (필수 기재)</label>
                     <select id="studyDetail"></select>
 
