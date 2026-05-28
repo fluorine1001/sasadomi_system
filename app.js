@@ -262,9 +262,9 @@ async function disconnectAccount() {
             document.getElementById('penaltyView').innerText = '0';
             document.querySelector('#historyTable tbody').innerHTML = '';
             
-            // 🟢 테이블 초기화 영역도 8열/6열 적용
-            document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="8" style="text-align:center;">내역을 불러오는 중...</td></tr>';
-            document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            // 🟢 테이블 초기화 영역 9열/8열 적용
+            document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="9" style="text-align:center; color:#999;">내역을 불러오는 중...</td></tr>';
+            document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">내역을 불러오는 중...</td></tr>';
             closeModal('studyModal');
             closeModal('outModal');
         } else { alert(data.message || '연동 해제 실패'); }
@@ -296,7 +296,8 @@ function renderStudyList(list) {
     tbody.innerHTML = '';
     
     if (!list || list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        // 🟢 9열 colspan 적용
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
         return;
     }
     
@@ -308,9 +309,9 @@ function renderStudyList(list) {
         const tr = document.createElement('tr');
         if (item.id) tr.id = `row-study-${item.id}`; // 실시간 삭제를 위한 ID 부여
 
-        // 🟢 8열 구조로 렌더링 (비어있는 값은 빈칸 유지)
+        // 🟢 9열 구조로 렌더링 (번호 맨 앞, 취소 맨 뒤 배치)
         tr.innerHTML = `
-            <td>${actionHtml}</td>
+            <td>${item.no || ''}</td>
             <td>${item.date || ''}</td>
             <td>${item.time || ''}</td>
             <td>${item.place || ''}</td>
@@ -318,6 +319,7 @@ function renderStudyList(list) {
             <td>${item.detail || ''}</td>
             <td>${item.applyDate || ''}</td>
             <td><span class="status-badge">${item.status || ''}</span></td>
+            <td>${actionHtml}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -328,7 +330,8 @@ function renderOutList(list) {
     tbody.innerHTML = '';
     
     if (!list || list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        // 🟢 8열 colspan 적용
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
         return;
     }
     
@@ -340,14 +343,16 @@ function renderOutList(list) {
         const tr = document.createElement('tr');
         if (item.id) tr.id = `row-out-${item.id}`;
 
-        // 🟢 6열 구조로 렌더링
+        // 🟢 8열 구조로 렌더링 (번호 맨 앞, 취소 맨 뒤 배치)
         tr.innerHTML = `
-            <td>${actionHtml}</td>
+            <td>${item.no || ''}</td>
             <td><strong>${item.type || ''}</strong></td>
-            <td>${item.reason || ''}</td>
             <td>${item.outDate || ''}</td>
             <td>${item.inDate || ''}</td>
+            <td>${item.reason || ''}</td>
+            <td>${item.applyDate || ''}</td>
             <td><span class="status-badge">${item.status || ''}</span></td>
+            <td>${actionHtml}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -380,7 +385,7 @@ async function deleteApplication(type, id) {
 
             const isStudy = type === 'study';
             const tableId = isStudy ? '#studyHistoryTable tbody' : '#outHistoryTable tbody';
-            const colSpan = isStudy ? 8 : 6;
+            const colSpan = isStudy ? 9 : 8; // 🟢 9열 / 8열 맞춤
 
             const tbody = document.querySelector(tableId);
             if (tbody && tbody.children.length === 0) {
