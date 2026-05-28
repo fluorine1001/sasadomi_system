@@ -201,25 +201,23 @@ function toggleStudyFields(placeValue) {
     }
 }
 
-// 📌 REST API v1: 자율학습 신청
+// 📌 REST API v1: 자율학습 신청 (수정됨)
 async function submitStudy() {
     const rawDate = document.getElementById('studyDate').value;
     const time = document.getElementById('studyTime').value;
     const place = document.getElementById('studyPlace').value;
     
     if (!rawDate) return alert('날짜를 지정해 주세요.');
-    const timestampSeconds = Math.floor(new Date(rawDate + 'T00:00:00').getTime() / 1000);
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     const payload = { 
         studentId: currentStudentId, 
         token: activeToken, 
-        date: timestampSeconds, 
+        date: rawDate, // 🟢 프론트엔드 타임스탬프 계산 제거 -> 순수 문자열(YYYY-MM-DD) 전송
         time: time, 
         place: place 
     };
 
-    // 🟢 수정됨: 본관일 때만 detail과 detail_reason을 담고, 아닐 경우 강제로 비웁니다.
     if (place === '3') {
         payload.detail = document.getElementById('studyDetail').value;
         payload.detail_reason = document.getElementById('studyDetailReason').value;
@@ -245,7 +243,7 @@ async function submitStudy() {
     } catch (error) { alert('서버 통신 중 오류가 발생했습니다.'); }
 }
 
-// 📌 REST API v1: 외출/외박 신청
+// 📌 REST API v1: 외출/외박 신청 (수정됨)
 async function submitOut() {
     const outType = document.getElementById('outType').value;
     const outReason = document.getElementById('outReason').value;
@@ -256,15 +254,23 @@ async function submitOut() {
 
     if (!bDateInput || !eDateInput || !outReason) return alert('필수 항목을 빠짐없이 기입해 주세요.');
 
-    const bdateSec = Math.floor(new Date(`${bDateInput}T${bTimeInput}:00`).getTime() / 1000);
-    const edateSec = Math.floor(new Date(`${eDateInput}T${eTimeInput}:00`).getTime() / 1000);
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
     try {
         const res = await fetch(`${BACKEND_API_URL}/v1/applications/out`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
-            body: JSON.stringify({ studentId: currentStudentId, token: activeToken, type: outType, reason: outReason, bdate: bdateSec, edate: edateSec })
+            // 🟢 프론트엔드 타임스탬프 계산 제거 -> 날짜 문자열과 시간 문자열을 각각 백엔드로 분리하여 전송
+            body: JSON.stringify({ 
+                studentId: currentStudentId, 
+                token: activeToken, 
+                type: outType, 
+                reason: outReason, 
+                bdate: bDateInput, 
+                btime: bTimeInput, 
+                edate: eDateInput, 
+                etime: eTimeInput 
+            })
         });
 
         const data = await res.json();
