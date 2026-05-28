@@ -135,39 +135,35 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 (기존 로직 완벽 유지 + 안전장치 추가)
+// 📌 대시보드 UI 렌더링 (상점표, 벌점표 분리 적용)
 function renderDashboard(data) {
-    const rewardView = document.getElementById('rewardView');
-    const penaltyView = document.getElementById('penaltyView');
-    const dashboard = document.getElementById('dashboard');
+    document.getElementById('rewardView').textContent = data.totalReward;
+    document.getElementById('penaltyView').textContent = data.totalPenalty;
 
-    if (rewardView) rewardView.innerText = data.totalReward;
-    if (penaltyView) penaltyView.innerText = data.totalPenalty;
+    // 표 렌더링용 내부 함수
+    const renderRows = (tableId, list) => {
+        const tbody = document.querySelector(`${tableId} tbody`);
+        if (!tbody) return; // 안전장치
 
-    const rewards = (data.rewardList || []).map(item => ({ ...item, type: '상점', color: '#1890ff' }));
-    const penalties = (data.penaltyList || []).map(item => ({ ...item, type: '벌점', color: '#ff4d4f' }));
-    const combinedList = [...rewards, ...penalties];
-
-    const tbody = document.querySelector('#historyTable tbody');
-    
-    // 🟢 안전장치: HTML에 테이블(tbody)이 존재할 때만 실행
-    if (tbody) {
         tbody.innerHTML = '';
-        combinedList.forEach(item => {
+        if(list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">내역이 없습니다.</td></tr>';
+            return;
+        }
+        list.forEach(item => {
             tbody.innerHTML += `<tr>
-                <td style="color: ${item.color}; font-weight: bold;">${item.type}</td>
-                <td>${item.score}</td>
-                <td>${item.weight}</td>
-                <td>${item.reason}</td>
                 <td>${item.date}</td>
+                <td>${item.reason}</td>
+                <td><strong>${item.score}</strong></td>
             </tr>`;
         });
-    } else {
-        // 🔴 테이블을 찾지 못했을 때 브라우저 콘솔에 경고 표시
-        console.warn("경고: HTML 파일에 id가 'historyTable'인 table 요소나 tbody가 존재하지 않습니다.");
-    }
+    };
 
-    if (dashboard) dashboard.style.display = 'block';
+    // 상점 리스트와 벌점 리스트를 각각의 표에 렌더링
+    renderRows('#rewardTable', data.rewardList || []);
+    renderRows('#penaltyTable', data.penaltyList || []);
+
+    document.getElementById('dashboard').style.display = 'block';
 }
 
 function clearSession() { localStorage.removeItem('sasa_sessionToken'); }
