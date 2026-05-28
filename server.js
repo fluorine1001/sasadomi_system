@@ -8,6 +8,8 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 
 import v1Router from './routes/v1.js';
+// 🟢 [추가됨] 개발자 포털 전용 라우터 불러오기
+import portalRouter from './routes/portal.js'; 
 
 const app = express();
 
@@ -16,7 +18,7 @@ app.set('trust proxy', 1);
 app.use(cors({
     origin: '*', 
     methods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
-    allowedHeaders: ['Content-Type', 'x-api-key']
+    allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'] // Authorization 헤더 추가 허용 (포털 토큰용)
 }));
 
 app.options(/.*/, cors()); 
@@ -120,7 +122,12 @@ app.get('/', (req, res) => {
     res.send('🚀 Sasadomi System Public API Hub is running!');
 });
 
+// 🟢 오픈 API v1 라우터 바인딩 (기존)
 app.use('/v1', apiLimiter, verifyDeveloperApiKey, v1Router(db, admin));
+
+// 🟢 [추가됨] 외부 개발자 전용 포털 관리 라우터 바인딩
+// 이 엔드포인트는 개발자 센터 전용이므로 외부 API Rate Limit이나 x-api-key 검증에서 제외됩니다.
+app.use('/portal', portalRouter(db, admin)); 
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`공용 오픈 API 서버 작동 중 :: 포트 ${PORT}`));
