@@ -93,6 +93,11 @@ app.get('/api-docs', (req, res) => {
     res.send(html);
 });
 
+// 🟢 [추가됨] LLM 및 AI 에이전트가 API 구조를 즉시 파악할 수 있도록 순수 OpenAPI Spec JSON 엔드포인트 개방
+app.get('/api-json', (req, res) => {
+    res.json(swaggerSpec);
+});
+
 if (!admin.apps.length) {
     admin.initializeApp({
         credential: admin.credential.cert({
