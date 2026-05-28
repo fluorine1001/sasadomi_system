@@ -65,28 +65,28 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/auth/login:
-     * post:
-     * summary: 학교 계정으로 로그인 및 연동
-     * tags: [Auth]
-     * requestBody:
-     * required: true
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * studentId: { type: string, example: "s2026030601" }
-     * studentPw: { type: string, example: "mypassword!" }
-     * responses:
-     * 200:
-     * description: 로그인 성공 및 세션 토큰 반환
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * sessionToken: { type: string, example: "c9b1cc70-7988-4447-92bb-92762a4d3cfd" }
+     *   post:
+     *     summary: 학교 계정으로 로그인 및 연동
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               studentId: { type: string, example: "s2026030601" }
+     *               studentPw: { type: string, example: "mypassword!" }
+     *     responses:
+     *       200:
+     *         description: 로그인 성공 및 세션 토큰 반환
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success: { type: boolean, example: true }
+     *                 sessionToken: { type: string, example: "c9b1cc70-7988-4447-92bb-92762a4d3cfd" }
      */
     router.post('/auth/login', async (req, res) => {
         const { studentId, studentPw } = req.body;
@@ -119,27 +119,27 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/auth/auto-login:
-     * post:
-     * summary: 토큰 기반 자동 로그인
-     * tags: [Auth]
-     * requestBody:
-     * required: true
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * token: { type: string, example: "a1b2c3d4-e5f6-7g8h..." }
-     * responses:
-     * 200:
-     * description: 토큰 인증 성공
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * success: { type: boolean, example: true }
-     * studentId: { type: string, example: "s2026030601" }
+     *   post:
+     *     summary: 토큰 기반 자동 로그인
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               token: { type: string, example: "a1b2c3d4-e5f6-7g8h..." }
+     *     responses:
+     *       200:
+     *         description: 토큰 인증 성공
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success: { type: boolean, example: true }
+     *                 studentId: { type: string, example: "s2026030601" }
      */
     router.post('/auth/auto-login', async (req, res) => {
         const { token } = req.body;
@@ -159,21 +159,21 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/auth/disconnect:
-     * post:
-     * summary: 계정 연동 해제 및 데이터 파기
-     * tags: [Auth]
-     * requestBody:
-     * required: true
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * studentId: { type: string, example: "s2026030601" }
-     * token: { type: string }
-     * responses:
-     * 200:
-     * description: 연동 해제 완료
+     *   post:
+     *     summary: 계정 연동 해제 및 데이터 파기
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               studentId: { type: string, example: "s2026030601" }
+     *               token: { type: string }
+     *     responses:
+     *       200:
+     *         description: 연동 해제 완료
      */
     router.post('/auth/disconnect', async (req, res) => {
         const { studentId, token } = req.body;
@@ -189,23 +189,23 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/points:
-     * get:
-     * summary: 상벌점 내역 조회 (캐싱 적용)
-     * tags: [Points]
-     * parameters:
-     * - in: query
-     * name: studentId
-     * required: true
-     * schema:
-     * type: string
-     * - in: query
-     * name: token
-     * required: true
-     * schema:
-     * type: string
-     * responses:
-     * 200:
-     * description: 상벌점 요약 및 리스트 반환
+     *   get:
+     *     summary: 상벌점 내역 조회 (캐싱 적용)
+     *     tags: [Points]
+     *     parameters:
+     *       - in: query
+     *         name: studentId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: query
+     *         name: token
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: 상벌점 요약 및 리스트 반환
      */
     router.get('/points', async (req, res) => {
         const { studentId, token } = req.query;
@@ -248,23 +248,23 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/applications:
-     * get:
-     * summary: 자율학습 및 외출/외박 신청 내역 조회 (캐싱 적용)
-     * tags: [Applications]
-     * parameters:
-     * - in: query
-     * name: studentId
-     * required: true
-     * schema:
-     * type: string
-     * - in: query
-     * name: token
-     * required: true
-     * schema:
-     * type: string
-     * responses:
-     * 200:
-     * description: 신청 내역 배열 반환
+     *   get:
+     *     summary: 자율학습 및 외출/외박 신청 내역 조회 (캐싱 적용)
+     *     tags: [Applications]
+     *     parameters:
+     *       - in: query
+     *         name: studentId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: query
+     *         name: token
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: 신청 내역 배열 반환
      */
     router.get('/applications', async (req, res) => {
         const { studentId, token } = req.query;
@@ -321,26 +321,26 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/applications/study:
-     * post:
-     * summary: 자율학습 신청 대행
-     * tags: [Applications]
-     * requestBody:
-     * required: true
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * studentId: { type: string }
-     * token: { type: string }
-     * date: { type: integer, description: "신청 날짜 (Unix Timestamp)" }
-     * time: { type: string, example: "08:00" }
-     * place: { type: string, example: "1" }
-     * detail: { type: string, example: "면학실" }
-     * detail_reason: { type: string }
-     * responses:
-     * 201:
-     * description: 신청 성공
+     *   post:
+     *     summary: 자율학습 신청 대행
+     *     tags: [Applications]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               studentId: { type: string }
+     *               token: { type: string }
+     *               date: { type: integer, description: "신청 날짜 (Unix Timestamp)" }
+     *               time: { type: string, example: "08:00" }
+     *               place: { type: string, example: "1" }
+     *               detail: { type: string, example: "면학실" }
+     *               detail_reason: { type: string }
+     *     responses:
+     *       201:
+     *         description: 신청 성공
      */
     router.post('/applications/study', async (req, res) => {
         const { studentId, token, date, time, place, detail, detail_reason } = req.body;
@@ -360,25 +360,25 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/applications/out:
-     * post:
-     * summary: 외출/외박 신청 대행
-     * tags: [Applications]
-     * requestBody:
-     * required: true
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * studentId: { type: string }
-     * token: { type: string }
-     * type: { type: string, example: "외출" }
-     * reason: { type: string, example: "병원 진료" }
-     * bdate: { type: integer, description: "시작 시간 Timestamp" }
-     * edate: { type: integer, description: "종료 시간 Timestamp" }
-     * responses:
-     * 201:
-     * description: 신청 완료
+     *   post:
+     *     summary: 외출/외박 신청 대행
+     *     tags: [Applications]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               studentId: { type: string }
+     *               token: { type: string }
+     *               type: { type: string, example: "외출" }
+     *               reason: { type: string, example: "병원 진료" }
+     *               bdate: { type: integer, description: "시작 시간 Timestamp" }
+     *               edate: { type: integer, description: "종료 시간 Timestamp" }
+     *     responses:
+     *       201:
+     *         description: 신청 완료
      */
     router.post('/applications/out', async (req, res) => {
         const { studentId, token, type, reason, bdate, edate } = req.body;
@@ -398,35 +398,35 @@ export default function v1Router(db, admin) {
     /**
      * @swagger
      * /v1/applications/{type}/{id}:
-     * delete:
-     * summary: 신청 내역 취소/삭제
-     * tags: [Applications]
-     * parameters:
-     * - in: path
-     * name: type
-     * required: true
-     * schema:
-     * type: string
-     * enum: [study, out]
-     * description: "취소할 종류 (study 또는 out)"
-     * - in: path
-     * name: id
-     * required: true
-     * schema:
-     * type: string
-     * description: "취소할 항목의 고유 ID"
-     * requestBody:
-     * required: true
-     * content:
-     * application/json:
-     * schema:
-     * type: object
-     * properties:
-     * studentId: { type: string }
-     * token: { type: string }
-     * responses:
-     * 200:
-     * description: 삭제 성공
+     *   delete:
+     *     summary: 신청 내역 취소/삭제
+     *     tags: [Applications]
+     *     parameters:
+     *       - in: path
+     *         name: type
+     *         required: true
+     *         schema:
+     *           type: string
+     *           enum: [study, out]
+     *         description: "취소할 종류 (study 또는 out)"
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: string
+     *         description: "취소할 항목의 고유 ID"
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               studentId: { type: string }
+     *               token: { type: string }
+     *     responses:
+     *       200:
+     *         description: 삭제 성공
      */
     router.delete('/applications/:type/:id', async (req, res) => {
         const { type, id } = req.params;
