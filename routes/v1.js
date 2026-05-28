@@ -620,7 +620,20 @@ export default function v1Router(db, admin) {
 
             const userDoc = await db.collection('users').doc(studentId).get();
             const client = await getAuthenticatedSession(studentId, decrypt(userDoc.data().encryptedPw));
-            const params = new URLSearchParams({ mode: 'apply', reason: '1', date, time, place, detail: finalDetail, detail_reason: detail_reason || '' });
+            // [수정 할 코드]
+            // 1. KST(+09:00) 기준 00시 00분 타임스탬프 생성
+            const dateTimestamp = Math.floor(new Date(`${date}T00:00:00+09:00`).getTime() / 1000);
+            
+            // 2. 파라미터에 date 대신 dateTimestamp 매핑
+            const params = new URLSearchParams({ 
+                mode: 'apply', 
+                reason: '1', 
+                date: dateTimestamp,  // 👈 문자열 대신 타임스탬프 숫자 삽입
+                time, 
+                place, 
+                detail: finalDetail, 
+                detail_reason: detail_reason || '' 
+            });
             
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/study_apply.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
             if (String(response.data).includes('실패') || String(response.data).includes('history.back')) return res.status(400).json({ success: false, message: '신청 기간 아님 / 이미 신청됨' });
@@ -674,11 +687,27 @@ export default function v1Router(db, admin) {
      *         description: 내부 통신 오류
      */
     router.post('/applications/out', async (req, res) => {
-        const { studentId, token, type, reason, bdate, edate } = req.body;
+        // [수정 할 코드]
+        // 1. 프론트엔드로부터 날짜와 시간을 각각 분리해서 받도록 req.body 수정
+        const { studentId, token, type, reason, bdate, btime, edate, etime } = req.body;
         try {
             const userDoc = await db.collection('users').doc(studentId).get();
             const client = await getAuthenticatedSession(studentId, decrypt(userDoc.data().encryptedPw));
-            const params = new URLSearchParams({ mode: 'apply', type, reason, bdate, edate });
+            // 2. 시간 규격화 (예: "01:00" 형태 보장) 및 KST 기준 타임스탬프 계산
+            const bhour = String(btime).includes(':') ? btime : `${String(btime).padStart(2, '0')}:00`;
+            const ehour = String(etime).includes(':') ? etime : `${String(etime).padStart(2, '0')}:00`;
+            
+            const bdateTimestamp = Math.floor(new Date(`${bdate}T${bhour}:00+09:00`).getTime() / 1000);
+            const edateTimestamp = Math.floor(new Date(`${edate}T${ehour}:00+09:00`).getTime() / 1000);
+            
+            // 3. 파라미터 매핑
+            const params = new URLSearchParams({ 
+                mode: 'apply', 
+                type, 
+                reason, 
+                bdate: bdateTimestamp, // 👈 타임스탬프 할당
+                edate: edateTimestamp  // 👈 타임스탬프 할당
+            });
             
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
             if (String(response.data).includes('실패') || String(response.data).includes('history.back')) return res.status(400).json({ success: false, message: '외출 거절됨' });
