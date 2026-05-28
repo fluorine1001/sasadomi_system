@@ -7,8 +7,16 @@ const SASADOMI_API_KEY = 'dev_abc123xyz';
 let currentStudentId = '';
 let currentSessionToken = ''; // 로그인 세션 토큰을 메모리에 안전하게 유지할 전역 변수
 
+// 🟢 일시 문자열 가독성 및 일관성 포맷터 함수
+function formatDateTime(str) {
+    if (!str) return '';
+    return str
+        .replace(/\s*(\([일월화수목금토]\))\s*/g, ' $1 ')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
 window.addEventListener('DOMContentLoaded', () => {
-    // 🟢 화면 로드 시 서버에서 드롭다운 옵션들을 받아와 채워넣습니다.
     fetchOptions(); 
 
     const savedToken = localStorage.getItem('sasa_sessionToken');
@@ -33,6 +41,10 @@ async function fetchOptions() {
             populateSelect('studyDetail', data.teachers.map(t => ({value: t, label: t})));
             populateSelect('outBtime', data.outTimes.map(t => ({value: t, label: t})));
             populateSelect('outEtime', data.outTimes.map(t => ({value: t, label: t})));
+            
+            // 옵션 로드 완료 후 현재 선택된 장소에 맞게 UI를 한 번 초기화합니다.
+            const initialPlace = document.getElementById('studyPlace');
+            if(initialPlace) toggleStudyFields(initialPlace.value);
         }
     } catch (error) { console.error("옵션 데이터 로드 실패", error); }
 }
@@ -105,7 +117,6 @@ async function syncAccount() {
         const res = await fetch(`${BACKEND_API_URL}/v1/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': SASADOMI_API_KEY },
-            // 🟢 백엔드가 학번을 파싱하므로 프론트에서는 아이디와 비밀번호만 전송
             body: JSON.stringify({ studentId, studentPw }) 
         });
 
@@ -135,43 +146,47 @@ async function syncAccount() {
     }
 }
 
-// 📌 대시보드 UI 렌더링 (상점표, 벌점표 분리 적용)
+// 📌 대시보드 UI 렌더링
 function renderDashboard(data) {
-    document.getElementById('rewardView').textContent = data.totalReward;
-    document.getElementById('penaltyView').textContent = data.totalPenalty;
+    if (document.getElementById('rewardView')) document.getElementById('rewardView').innerText = data.totalReward;
+    if (document.getElementById('penaltyView')) document.getElementById('penaltyView').innerText = data.totalPenalty;
 
-    // 표 렌더링용 내부 함수
     const renderRows = (tableId, list) => {
         const tbody = document.querySelector(`${tableId} tbody`);
-        if (!tbody) return; // 안전장치
+        if (!tbody) return;
 
         tbody.innerHTML = '';
-        if(list.length === 0) {
+        if (list.length === 0) {
             tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">내역이 없습니다.</td></tr>';
             return;
         }
         list.forEach(item => {
             tbody.innerHTML += `<tr>
-                <td>${item.date}</td>
-                <td>${item.reason}</td>
+                <td>${formatDateTime(item.date)}</td>
+                <td>${item.reason || ''}</td>
                 <td><strong>${item.score}</strong></td>
             </tr>`;
         });
     };
 
-    // 상점 리스트와 벌점 리스트를 각각의 표에 렌더링
     renderRows('#rewardTable', data.rewardList || []);
     renderRows('#penaltyTable', data.penaltyList || []);
 
-    document.getElementById('dashboard').style.display = 'block';
+    if (document.getElementById('dashboard')) document.getElementById('dashboard').style.display = 'block';
 }
 
 function clearSession() { localStorage.removeItem('sasa_sessionToken'); }
 
+// 🟢 수정됨: 장소가 '본관(3)'일 때만 UI 그룹을 보여줍니다.
 function toggleStudyFields(placeValue) {
-    const conditionalBox = document.getElementById('conditionalStudyFields');
-    if (placeValue === '3') conditionalBox.style.display = 'block';
-    else conditionalBox.style.display = 'none';
+    const detailGroup = document.getElementById('studyDetailGroup');
+    if (detailGroup) {
+        if (placeValue === '3') {
+            detailGroup.style.display = 'block';
+        } else {
+            detailGroup.style.display = 'none';
+        }
+    }
 }
 
 // 📌 REST API v1: 자율학습 신청
@@ -184,12 +199,22 @@ async function submitStudy() {
     const timestampSeconds = Math.floor(new Date(rawDate + 'T00:00:00').getTime() / 1000);
     const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
 
-    const payload = { studentId: currentStudentId, token: activeToken, date: timestampSeconds, time: time, place: place };
+    const payload = { 
+        studentId: currentStudentId, 
+        token: activeToken, 
+        date: timestampSeconds, 
+        time: time, 
+        place: place 
+    };
 
+    // 🟢 수정됨: 본관일 때만 detail과 detail_reason을 담고, 아닐 경우 강제로 비웁니다.
     if (place === '3') {
         payload.detail = document.getElementById('studyDetail').value;
         payload.detail_reason = document.getElementById('studyDetailReason').value;
         if (!payload.detail_reason) return alert('본관 사유를 기록해 주세요.');
+    } else {
+        payload.detail = '';
+        payload.detail_reason = '';
     }
 
     try {
@@ -239,6 +264,20 @@ async function submitOut() {
     } catch (error) { alert('서버 통신 중 오류가 발생했습니다.'); }
 }
 
+// 📌 REST API v1: 데이터 새로고침
+function refreshData() {
+    const activeToken = currentSessionToken || localStorage.getItem('sasa_sessionToken');
+    if (currentStudentId && activeToken) {
+        fetchPoints(currentStudentId, activeToken);
+        fetchApplications(currentStudentId, activeToken);
+    }
+}
+
+// 📌 로그아웃 처리
+function logout() {
+    disconnectAccount();
+}
+
 // 📌 REST API v1: 연동 해제
 async function disconnectAccount() {
     if (!currentStudentId) return alert('현재 연동된 계정이 없습니다.');
@@ -259,18 +298,26 @@ async function disconnectAccount() {
             clearSession();
             currentStudentId = '';
             currentSessionToken = '';
-            document.getElementById('dashboard').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
-            document.getElementById('studentId').value = '';
-            document.getElementById('studentPw').value = '';
+            if (document.getElementById('dashboard')) document.getElementById('dashboard').style.display = 'none';
+            if (document.getElementById('loginForm')) document.getElementById('loginForm').style.display = 'block';
+            if (document.getElementById('studentId')) document.getElementById('studentId').value = '';
+            if (document.getElementById('studentPw')) document.getElementById('studentPw').value = '';
             if (document.getElementById('rememberMe')) document.getElementById('rememberMe').checked = false;
-            document.getElementById('rewardView').innerText = '0';
-            document.getElementById('penaltyView').innerText = '0';
-            document.querySelector('#historyTable tbody').innerHTML = '';
+            if (document.getElementById('rewardView')) document.getElementById('rewardView').innerText = '0';
+            if (document.getElementById('penaltyView')) document.getElementById('penaltyView').innerText = '0';
             
-            // 🟢 테이블 초기화 영역 9열/8열 적용
-            document.querySelector('#studyHistoryTable tbody').innerHTML = '<tr><td colspan="9" style="text-align:center; color:#999;">내역을 불러오는 중...</td></tr>';
-            document.querySelector('#outHistoryTable tbody').innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">내역을 불러오는 중...</td></tr>';
+            const historyTbody = document.querySelector('#historyTable tbody');
+            if (historyTbody) historyTbody.innerHTML = '';
+            const rewardTbody = document.querySelector('#rewardTable tbody');
+            if (rewardTbody) rewardTbody.innerHTML = '';
+            const penaltyTbody = document.querySelector('#penaltyTable tbody');
+            if (penaltyTbody) penaltyTbody.innerHTML = '';
+            
+            const studyTbody = document.querySelector('#studyHistoryTable tbody');
+            if (studyTbody) studyTbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            const outTbody = document.querySelector('#outHistoryTable tbody');
+            if (outTbody) outTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">내역을 불러오는 중...</td></tr>';
+            
             closeModal('studyModal');
             closeModal('outModal');
         } else { alert(data.message || '연동 해제 실패'); }
@@ -280,8 +327,7 @@ async function disconnectAccount() {
 function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
-
-// 📌 REST API v1: 신청 내역 조회 (GET 방식, 쿼리파라미터 사용)
+// 📌 REST API v1: 신청 내역 조회
 async function fetchApplications(studentId, token) {
     try {
         const res = await fetch(`${BACKEND_API_URL}/v1/applications?studentId=${studentId}&token=${token}`, {
@@ -299,11 +345,11 @@ async function fetchApplications(studentId, token) {
 
 function renderStudyList(list) {
     const tbody = document.querySelector('#studyHistoryTable tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     
     if (!list || list.length === 0) {
-        // 🟢 9열 colspan 적용
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
         return;
     }
     
@@ -313,17 +359,16 @@ function renderStudyList(list) {
             : `<span style="color:#aaa; font-size:11px; font-weight:normal;">-</span>`;
 
         const tr = document.createElement('tr');
-        if (item.id) tr.id = `row-study-${item.id}`; // 실시간 삭제를 위한 ID 부여
+        if (item.id) tr.id = `row-study-${item.id}`; 
 
-        // 🟢 9열 구조로 렌더링 (번호 맨 앞, 취소 맨 뒤 배치)
         tr.innerHTML = `
             <td>${item.no || ''}</td>
-            <td>${item.date || ''}</td>
+            <td>${formatDateTime(item.date)}</td>
             <td>${item.time || ''}</td>
             <td>${item.place || ''}</td>
             <td>${item.teacher || ''}</td>
-            <td>${item.detail || ''}</td>
-            <td>${item.applyDate || ''}</td>
+            <td class="text-truncate" title="${item.detail || ''}">${item.detail || ''}</td>
+            <td>${formatDateTime(item.applyDate)}</td>
             <td><span class="status-badge">${item.status || ''}</span></td>
             <td>${actionHtml}</td>
         `;
@@ -333,10 +378,10 @@ function renderStudyList(list) {
 
 function renderOutList(list) {
     const tbody = document.querySelector('#outHistoryTable tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     
     if (!list || list.length === 0) {
-        // 🟢 8열 colspan 적용
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>';
         return;
     }
@@ -349,14 +394,13 @@ function renderOutList(list) {
         const tr = document.createElement('tr');
         if (item.id) tr.id = `row-out-${item.id}`;
 
-        // 🟢 8열 구조로 렌더링 (번호 맨 앞, 취소 맨 뒤 배치)
         tr.innerHTML = `
             <td>${item.no || ''}</td>
             <td><strong>${item.type || ''}</strong></td>
-            <td>${item.outDate || ''}</td>
-            <td>${item.inDate || ''}</td>
+            <td>${formatDateTime(item.outDate)}</td>
+            <td>${formatDateTime(item.inDate)}</td>
             <td>${item.reason || ''}</td>
-            <td>${item.applyDate || ''}</td>
+            <td>${formatDateTime(item.applyDate)}</td>
             <td><span class="status-badge">${item.status || ''}</span></td>
             <td>${actionHtml}</td>
         `;
@@ -364,7 +408,7 @@ function renderOutList(list) {
     });
 }
 
-// 📌 REST API v1: 취소/삭제 대행 (DELETE 방식, 실시간 UI 제거 적용)
+// 📌 REST API v1: 취소/삭제 대행
 async function deleteApplication(type, id) {
     if (!id || id === 'undefined' || id === '') {
         alert("이 항목은 학교 시스템상 이미 확정되어 원격 취소/삭제가 불가능합니다.");
@@ -385,20 +429,18 @@ async function deleteApplication(type, id) {
         if (data.success) {
             alert('신청 항목이 성공적으로 삭제/취소 처리되었습니다.');
             
-            // 🟢 [낙관적 업데이트] 화면에서 해당 줄 바로 삭제
             const rowElement = document.getElementById(`row-${type}-${id}`);
             if (rowElement) rowElement.remove();
 
             const isStudy = type === 'study';
             const tableId = isStudy ? '#studyHistoryTable tbody' : '#outHistoryTable tbody';
-            const colSpan = isStudy ? 9 : 8; // 🟢 9열 / 8열 맞춤
+            const colSpan = isStudy ? 9 : 8;
 
             const tbody = document.querySelector(tableId);
             if (tbody && tbody.children.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center; color:#999;">신청 내역이 없습니다.</td></tr>`;
             }
 
-            // DB 싱크를 맞추기 위해 1초 뒤 조용히 백그라운드 새로고침
             setTimeout(() => { fetchApplications(currentStudentId, activeToken); }, 1000);
         } else {
             alert(data.message || '삭제 실패');
