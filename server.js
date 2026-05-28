@@ -15,7 +15,13 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-app.options(/.*/, cors()); 
+// 🟢 [수정됨] 브라우저의 OPTIONS 사전 검사(Preflight) 및 커스텀 헤더(x-api-key)를 완벽하게 허용하는 글로벌 CORS 설정
+app.use(cors({
+    origin: '*', // 실무에서 프론트엔드 도메인만 제한하려면 '*' 대신 'https://fluorine1001.github.io'를 작성하세요.
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-api-key'],
+    credentials: true
+}));
 
 // 🟢 [3단계 처리량 제한] 에러 코드 표준화 적용 (TOO_MANY_REQUESTS)
 const apiLimiter = rateLimit({
