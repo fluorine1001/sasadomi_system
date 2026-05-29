@@ -59,8 +59,8 @@ function parseTable(html) {
         const tds = $(element).find('td');
         if (tds.length >= 4) {
             const no = tds.eq(0).text().trim();
-            // ⭐ 수정 적용: 점수를 문자열 대신 숫자로 변환 (이후 연산 편의성 제공)
-            const score = parseInt(tds.eq(1).text().trim(), 10) || 0;
+            // ⭐ 수정 적용: 점수를 문자열로 반환
+            const score = tds.eq(1).text().trim();
             
             // 3번째 td에서 사유와 코멘트 분리
             const contentTd = tds.eq(2);
@@ -106,29 +106,29 @@ export default function v1Router(db, admin) {
      *               properties:
      *                 success: { type: boolean, example: true }
      *                 studyTimes:
-     *                 type: array
-     *     description: 자율학습 신청 시 선택 가능한 시간대 목록
-     *                 items:
-     *                 type: object
-     *                 properties:
-     *                 value: { type: string, example: "1" }
-     *                 label: { type: string, example: "오전" }
+     *                   type: array
+     *                   description: 자율학습 신청 시 선택 가능한 시간대 목록
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       value: { type: string, example: "1" }
+     *                       label: { type: string, example: "오전" }
      *                 studyPlaces:
-     *                 type: array
-     *     description: 자율학습 신청 시 선택 가능한 장소 목록
-     *                 items:
-     *                 type: object
-     *                 properties:
-     *                 value: { type: string, example: "1" }
-     *                 label: { type: string, example: "호실(요양)-주간 평일 3회" }
+     *                   type: array
+     *                   description: 자율학습 신청 시 선택 가능한 장소 목록
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       value: { type: string, example: "1" }
+     *                       label: { type: string, example: "호실(요양)-주간 평일 3회" }
      *                 teachers:
-     *                 type: array
-     *     description: 본관 활동 등 승인에 필요한 지도교사 이름 목록 (학교 시스템에 등록된 전체 교사 풀)
-     *                 items: { type: string, example: "김사사" }
+     *                   type: array
+     *                   description: 본관 활동 등 승인에 필요한 지도교사 이름 목록 (학교 시스템에 등록된 전체 교사 풀)
+     *                   items: { type: string, example: "김사사" }
      *                 outTimes:
-     *                 type: array
-     *     description: 외출/외박 신청 시 선택 가능한 1시간 단위 고정 시간 배열 (00:00부터 23:00까지 24개 항목)
-     *                 items: { type: string, example: "00:00" }
+     *                   type: array
+     *                   description: 외출/외박 신청 시 선택 가능한 1시간 단위 고정 시간 배열 (00:00부터 23:00까지 24개 항목)
+     *                   items: { type: string, example: "00:00" }
      */
     router.get('/meta/options', (req, res) => {
         res.json({
@@ -331,16 +331,16 @@ export default function v1Router(db, admin) {
      *     description: 3분(180초) 간의 로컬 메모리 캐싱이 적용됩니다. 캐시 미스 시 원본 기숙사 사이트 상벌점 페이지 탭을 크롤링 및 파싱하여 상세 목록과 총점을 빌드합니다.
      *     tags: [Points]
      *     parameters:
-     *     - in: query
-     *       name: studentId
-     *       required: true
-     *       schema: { type: string }
-     *     description: 조회 대상 학번
-     *     - in: query
-     *       name: token
-     *       required: true
-     *       schema: { type: string }
-     *     description: 권한을 검증할 유효 세션 토큰
+     *       - in: query
+     *         name: studentId
+     *         required: true
+     *         schema: { type: string }
+     *         description: 조회 대상 학번
+     *       - in: query
+     *         name: token
+     *         required: true
+     *         schema: { type: string }
+     *         description: 권한을 검증할 유효 세션 토큰
      *     responses:
      *       200:
      *         description: 상벌점 데이터 집계 완료 (캐시 또는 실시간 크롤링 결과)
@@ -350,30 +350,30 @@ export default function v1Router(db, admin) {
      *               type: object
      *               properties:
      *                 success: { type: boolean, example: true }
-     *                 totalReward: { type: integer, example: 12, description: "누적 상점 총점 (문자열이 아닌 숫자형으로 반환됩니다)" }
-     *                 totalPenalty: { type: integer, example: 2, description: "누적 벌점 총점 (문자열이 아닌 숫자형으로 반환됩니다)" }
+     *                 totalReward: { type: string, example: "12", description: "누적 상점 총점" }
+     *                 totalPenalty: { type: string, example: "2", description: "누적 벌점 총점" }
      *                 rewardList:
-     *                 type: array
-     *     description: 학생에게 부여된 상점 상세 내역 목록 (번호, 점수, 내용/코멘트, 날짜 순서)
-     *                 items:
-     *                 type: object
-     *                 properties:
-     *                 no: { type: string, example: "1" }
-     *                 score: { type: integer, example: 2, description: "부여된 상점 (문자열이 아닌 숫자형으로 반환됩니다)" }
-     *                 reason: { type: string, example: "정독실 면학 태도 우수" }
-     *                 comment: { type: string, example: "5월 호실 점검 청결 상태 우수" }
-     *                 date: { type: string, example: "05-28 (목)" }
+     *                   type: array
+     *                   description: 학생에게 부여된 상점 상세 내역 목록 (번호, 점수, 내용/코멘트, 날짜 순서)
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       no: { type: string, example: "1" }
+     *                       score: { type: string, example: "2" }
+     *                       reason: { type: string, example: "정독실 면학 태도 우수" }
+     *                       comment: { type: string, example: "5월 호실 점검 청결 상태 우수" }
+     *                       date: { type: string, example: "05-28 (목)" }
      *                 penaltyList:
-     *                 type: array
-     *     description: 학생에게 부여된 벌점 상세 내역 목록 (번호, 점수, 내용/코멘트, 날짜 순서)
-     *                 items:
-     *                 type: object
-     *                 properties:
-     *                 no: { type: string, example: "1" }
-     *                 score: { type: integer, example: 1, description: "부여된 벌점 (문자열이 아닌 숫자형으로 반환됩니다)" }
-     *                 reason: { type: string, example: "지각" }
-     *                 comment: { type: string, example: "아침 점호 10분 지각" }
-     *                 date: { type: string, example: "04-12 (일)" }
+     *                   type: array
+     *                   description: 학생에게 부여된 벌점 상세 내역 목록 (번호, 점수, 내용/코멘트, 날짜 순서)
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       no: { type: string, example: "1" }
+     *                       score: { type: string, example: "1" }
+     *                       reason: { type: string, example: "지각" }
+     *                       comment: { type: string, example: "아침 점호 10분 지각" }
+     *                       date: { type: string, example: "04-12 (일)" }
      *       401:
      *         description: 토큰 누락 또는 세션과 학번의 비매칭 (권한 없음)
      *         content:
@@ -404,12 +404,12 @@ export default function v1Router(db, admin) {
             const client = await getAuthenticatedSession(studentId, decrypt(userDoc.data().encryptedPw));
 
             const rewardResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=1`);
-            // ⭐ 수정 적용: 정확한 ID만 타겟팅하여 불필요한 태그 의존성을 제거하고 숫자로 변환
-            const totalReward = parseInt(cheerio.load(rewardResponse.data)('#rewordTab').text().replace(/[^0-9]/g, ''), 10) || 0;
+            // ⭐ 수정 적용: 정확한 ID만 타겟팅하여 불필요한 태그 의존성을 제거하고 문자열로 반환
+            const totalReward = cheerio.load(rewardResponse.data)('#rewordTab').text().replace(/[^0-9]/g, '') || '0';
             
             const penaltyResponse = await client.get(`${SCHOOL_BASE_URL}/point/list.php?tab=2`);
-            // ⭐ 수정 적용: 정확한 ID만 타겟팅하여 불필요한 태그 의존성을 제거하고 숫자로 변환
-            const totalPenalty = parseInt(cheerio.load(penaltyResponse.data)('#punishmentTab').text().replace(/[^0-9]/g, ''), 10) || 0;
+            // ⭐ 수정 적용: 정확한 ID만 타겟팅하여 불필요한 태그 의존성을 제거하고 문자열로 반환
+            const totalPenalty = cheerio.load(penaltyResponse.data)('#punishmentTab').text().replace(/[^0-9]/g, '') || '0';
 
             const responseData = { 
                 success: true, 
@@ -432,14 +432,14 @@ export default function v1Router(db, admin) {
      *     description: 3분 간의 캐싱이 지원됩니다. 원본 기숙사 웹의 자율학습 신청현황과 외출/외박 신청현황 목록을 파싱하여 정제된 리스트로 통합 반환합니다.
      *     tags: [Applications]
      *     parameters:
-     *     - in: query
-     *       name: studentId
-     *       required: true
-     *       schema: { type: string }
-     *     - in: query
-     *       name: token
-     *       required: true
-     *       schema: { type: string }
+     *       - in: query
+     *         name: studentId
+     *         required: true
+     *         schema: { type: string }
+     *       - in: query
+     *         name: token
+     *         required: true
+     *         schema: { type: string }
      *     responses:
      *       200:
      *         description: 신청 목록 통합 빌드 완료
@@ -450,34 +450,34 @@ export default function v1Router(db, admin) {
      *               properties:
      *                 success: { type: boolean, example: true }
      *                 studyList:
-     *                 type: array
-     *     description: 자율학습 신청 내역 목록
-     *                 items:
-     *                 type: object
-     *                 properties:
-     *                 id: { type: string, example: "12543", description: "취소/삭제 처리에 사용되는 원본 체크박스 고유 ID값" }
-     *                 no: { type: string, example: "1", description: "UI용 번호" }
-     *                 date: { type: string, example: "05-28 (목)" }
-     *                 time: { type: string, example: "학습 I", description: "신청한 교시 라벨 텍스트 (/v1/meta/options 출처)" }
-     *                 place: { type: string, example: "정독실", description: "자율학습 장소 라벨 텍스트 (/v1/meta/options 출처)" }
-     *                 teacher: { type: string, example: "김사사", description: "/v1/meta/options의 teachers 목록에 존재하는 지도교사 이름 (라벨)" }
-     *                 detail: { type: string, example: "수학 집중 학습" }
-     *                 applyDate: { type: string, example: "05-27 (수) 18:22" }
-     *                 status: { type: string, example: "승인", description: "승인 / 거절 / 대기" }
+     *                   type: array
+     *                   description: 자율학습 신청 내역 목록
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       id: { type: string, example: "12543", description: "취소/삭제 처리에 사용되는 원본 체크박스 고유 ID값" }
+     *                       no: { type: string, example: "1", description: "UI용 번호" }
+     *                       date: { type: string, example: "05-28 (목)" }
+     *                       time: { type: string, example: "학습 I", description: "신청한 교시 라벨 텍스트 (/v1/meta/options 출처)" }
+     *                       place: { type: string, example: "정독실", description: "자율학습 장소 라벨 텍스트 (/v1/meta/options 출처)" }
+     *                       teacher: { type: string, example: "사사마", description: "/v1/meta/options의 teachers 목록에 존재하는 지도교사 이름 (라벨)" }
+     *                       detail: { type: string, example: "수학 집중 학습" }
+     *                       applyDate: { type: string, example: "05-27 (수) 18:22" }
+     *                       status: { type: string, example: "승인", description: "승인 / 거절 / 대기" }
      *                 outList:
-     *                 type: array
-     *     description: 외출/외박 신청 내역 목록
-     *                 items:
-     *                 type: object
-     *                 properties:
-     *                 id: { type: string, example: "9874", description: "외출 취소 처리에 필수적인 고유 식별자 ID" }
-     *                 no: { type: string, example: "1", description: "UI용 번호" }
-     *                 type: { type: string, example: "외출", description: "외출 / 외박" }
-     *                 reason: { type: string, example: "귀가" }
-     *                 outDate: { type: string, example: "05-29 (금) 17:00" }
-     *                 inDate: { type: string, example: "05-31 (일) 21:00" }
-     *                 applyDate: { type: string, example: "05-27 (수) 18:22" }
-     *                 status: { type: string, example: "대기" }
+     *                   type: array
+     *                   description: 외출/외박 신청 내역 목록
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       id: { type: string, example: "9874", description: "외출 취소 처리에 필수적인 고유 식별자 ID" }
+     *                       no: { type: string, example: "1", description: "UI용 번호" }
+     *                       type: { type: string, example: "외출", description: "외출 / 외박" }
+     *                       reason: { type: string, example: "귀가" }
+     *                       outDate: { type: string, example: "05-29 (금) 17:00" }
+     *                       inDate: { type: string, example: "05-31 (일) 21:00" }
+     *                       applyDate: { type: string, example: "05-27 (수) 18:22" }
+     *                       status: { type: string, example: "대기" }
      *       401:
      *         description: 세션 불일치 또는 토큰 누락
      *         content:
@@ -588,7 +588,7 @@ export default function v1Router(db, admin) {
      *               date: { type: integer, description: "신청 날짜의 한국 표준시(KST) 00시 00분 기준 초 단위 Unix Timestamp", example: 1779807600 }
      *               time: { type: string, description: "반드시 /v1/meta/options에서 조회한 studyTimes의 value 값을 사용해야 합니다 (예: 1~6)", example: "3" }
      *               place: { type: string, description: "반드시 /v1/meta/options에서 조회한 studyPlaces의 value 값을 사용해야 합니다. '3'은 본관을 의미합니다.", example: "3" }
-     *               detail: { type: string, description: "지도교사 이름. 장소(place)가 '3'(본관)인 경우에만 필수 선택 항목이며, 그 외 장소일 경우에는 강제로 빈 문자열('')이 전송됩니다.", example: "김사사" }
+     *               detail: { type: string, description: "지도교사 이름. 장소(place)가 '3'(본관)인 경우에만 필수 선택 항목이며, 그 외 장소일 경우에는 강제로 빈 문자열('')이 전송됩니다.", example: "사사마" }
      *               detail_reason: { type: string, description: "기타 사유 국어 텍스트", example: "" }
      *     responses:
      *       200:
@@ -620,6 +620,7 @@ export default function v1Router(db, admin) {
             }
             const finalDetail = place === '3' ? detail : '';
 
+            // ⭐ 11자리 학번 포맷 파싱 및 추출 수정 적용
             let grade = '';
             let sclass = '';
             let classNumber = '';
@@ -640,8 +641,8 @@ export default function v1Router(db, admin) {
                 grade: grade,
                 class: sclass,
                 class_number: classNumber,
-                reason: '1',
-                date: date,
+                reason: '1',  // ⭐ 자율학습 필수 고정값
+                date: date,   // KST 타임스탬프
                 time: time, 
                 place: place, 
                 detail: finalDetail, 
@@ -702,6 +703,7 @@ export default function v1Router(db, admin) {
     router.post('/applications/out', async (req, res) => {
         const { studentId, token, type, reason, bdate, edate } = req.body;
         try {
+            // ⭐ 11자리 학번 포맷 파싱 및 추출 수정 적용
             let grade = '';
             let sclass = '';
             let classNumber = '';
@@ -724,8 +726,8 @@ export default function v1Router(db, admin) {
                 class_number: classNumber,
                 type: type, 
                 reason: reason, 
-                bdate: bdate,
-                edate: edate
+                bdate: bdate, // KST 타임스탬프
+                edate: edate  // KST 타임스탬프
             });
             
             const response = await client.post(`${SCHOOL_BASE_URL}/Lib/school_out.action.php`, params.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
@@ -744,16 +746,16 @@ export default function v1Router(db, admin) {
      *     description: 접수되거나 승인 대기 중인 특정 자율학습 또는 외출 내역을 원본 기숙사 시스템 상에서 영구 취소 및 삭제 처리합니다.
      *     tags: [Applications]
      *     parameters:
-     *     - in: path
-     *       name: type
-     *       required: true
-     *       schema: { type: string, enum: [study, out] }
-     *     description: "취소 타겟 분류 도메인 (자율학습은 study, 외출/외박은 out)"
-     *     - in: path
-     *       name: id
-     *       required: true
-     *       schema: { type: string }
-     *     description: "체크박스 로드 시 함께 파싱되었던 고유 레코드 아이디(id/itemCheck value)"
+     *       - in: path
+     *         name: type
+     *         required: true
+     *         schema: { type: string, enum: [study, out] }
+     *         description: "취소 타겟 분류 도메인 (자율학습은 study, 외출/외박은 out)"
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema: { type: string }
+     *         description: "체크박스 로드 시 함께 파싱되었던 고유 레코드 아이디(id/itemCheck value)"
      *     requestBody:
      *       required: true
      *       content:
