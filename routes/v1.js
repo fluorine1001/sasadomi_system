@@ -460,7 +460,7 @@ export default function v1Router(db, admin) {
      * date: { type: string, example: "05-28 (목)" }
      * time: { type: string, example: "학습 I", description: "신청한 교시 라벨 텍스트 (/v1/meta/options 출처)" }
      * place: { type: string, example: "정독실", description: "자율학습 장소 라벨 텍스트 (/v1/meta/options 출처)" }
-     * teacher: { type: string, example: "사사마", description: "/v1/meta/options의 teachers 목록에 존재하는 지도교사 이름 (라벨)" }
+     * teacher: { type: string, example: "김사사", description: "/v1/meta/options의 teachers 목록에 존재하는 지도교사 이름 (라벨)" }
      * detail: { type: string, example: "수학 집중 학습" }
      * applyDate: { type: string, example: "05-27 (수) 18:22" }
      * status: { type: string, example: "승인", description: "승인 / 거절 / 대기" }
