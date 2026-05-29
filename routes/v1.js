@@ -124,7 +124,7 @@ export default function v1Router(db, admin) {
      * teachers:
      * type: array
      * description: 본관 활동 등 승인에 필요한 지도교사 이름 목록 (학교 시스템에 등록된 전체 교사 풀)
-     * items: { type: string, example: "사사마" }
+     * items: { type: string, example: "김사사" }
      * outTimes:
      * type: array
      * description: 외출/외박 신청 시 선택 가능한 1시간 단위 고정 시간 배열 (00:00부터 23:00까지 24개 항목)
@@ -350,8 +350,8 @@ export default function v1Router(db, admin) {
      * type: object
      * properties:
      * success: { type: boolean, example: true }
-     * totalReward: { type: string, example: "12", description: "누적 상점 총점" }
-     * totalPenalty: { type: string, example: "2", description: "누적 벌점 총점" }
+     * totalReward: { type: integer, example: 12, description: "누적 상점 총점 (문자열이 아닌 숫자형으로 반환됩니다)" }
+     * totalPenalty: { type: integer, example: 2, description: "누적 벌점 총점 (문자열이 아닌 숫자형으로 반환됩니다)" }
      * rewardList:
      * type: array
      * description: 학생에게 부여된 상점 상세 내역 목록 (번호, 점수, 내용/코멘트, 날짜 순서)
@@ -359,7 +359,7 @@ export default function v1Router(db, admin) {
      * type: object
      * properties:
      * no: { type: string, example: "1" }
-     * score: { type: string, example: "2" }
+     * score: { type: integer, example: 2, description: "부여된 상점 (문자열이 아닌 숫자형으로 반환됩니다)" }
      * reason: { type: string, example: "정독실 면학 태도 우수" }
      * comment: { type: string, example: "5월 호실 점검 청결 상태 우수" }
      * date: { type: string, example: "05-28 (목)" }
@@ -370,7 +370,7 @@ export default function v1Router(db, admin) {
      * type: object
      * properties:
      * no: { type: string, example: "1" }
-     * score: { type: string, example: "1" }
+     * score: { type: integer, example: 1, description: "부여된 벌점 (문자열이 아닌 숫자형으로 반환됩니다)" }
      * reason: { type: string, example: "지각" }
      * comment: { type: string, example: "아침 점호 10분 지각" }
      * date: { type: string, example: "04-12 (일)" }
@@ -588,7 +588,7 @@ export default function v1Router(db, admin) {
      * date: { type: integer, description: "신청 날짜의 한국 표준시(KST) 00시 00분 기준 초 단위 Unix Timestamp", example: 1779807600 }
      * time: { type: string, description: "반드시 /v1/meta/options에서 조회한 studyTimes의 value 값을 사용해야 합니다 (예: 1~6)", example: "3" }
      * place: { type: string, description: "반드시 /v1/meta/options에서 조회한 studyPlaces의 value 값을 사용해야 합니다. '3'은 본관을 의미합니다.", example: "3" }
-     * detail: { type: string, description: "지도교사 이름. 장소(place)가 '3'(본관)인 경우에만 필수 선택 항목이며, 그 외 장소일 경우에는 강제로 빈 문자열('')이 전송됩니다.", example: "사사마" }
+     * detail: { type: string, description: "지도교사 이름. 장소(place)가 '3'(본관)인 경우에만 필수 선택 항목이며, 그 외 장소일 경우에는 강제로 빈 문자열('')이 전송됩니다.", example: "김사사" }
      * detail_reason: { type: string, description: "기타 사유 국어 텍스트", example: "" }
      * responses:
      * 200:
